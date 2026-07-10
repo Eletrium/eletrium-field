@@ -445,7 +445,7 @@ input[type=range]{width:100%;height:44px;accent-color:var(--green);cursor:pointe
 // Cole aqui a URL do Web App do Apps Script (Implantar > Nova
 // implantação > Tipo: App da Web > Executar como: Eu > Acesso:
 // Qualquer pessoa). Deve terminar em /exec
-const API_URL = 'https://script.google.com/macros/s/AKfycbxW8BIFe5F1suLDK0OviEojDrFQFCHjw7lZ32pCgA4fDSZCgynsfABKso0KnTx2ZJ5xCQ/exec';
+const API_URL = 'COLE_AQUI_A_URL_DO_APPS_SCRIPT_/exec';
 
 // IndexedDB simples para fila offline
 const DB_NAME = 'eletrium_offline';
@@ -497,16 +497,52 @@ async function processarFilaOffline() {
   }
 }
 
+// JSONP: o Apps Script não devolve cabeçalho de CORS nas
+// respostas, então fetch() de outro domínio é bloqueado pelo
+// navegador mesmo quando o servidor responde com sucesso. Uma
+// tag <script> comum não sofre esse bloqueio — por isso usamos
+// esse formato em vez de fetch() para falar com o Apps Script.
+let jsonpContador = 0;
 function gsCallReal(action, params) {
-  return fetch(API_URL, {
-    method: 'POST',
-    // Content-Type "text/plain" evita o preflight de CORS
-    // (Apps Script não responde bem a OPTIONS). O corpo
-    // continua sendo JSON de verdade, só a Content-Type
-    // declarada muda.
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action, params: params || [] })
-  }).then(res => res.json());
+  return new Promise((resolve, reject) => {
+    const nomeCallback = 'gsCallback_' + (jsonpContador++);
+    const script = document.createElement('script');
+    let finalizado = false;
+
+    const limpar = () => {
+      delete window[nomeCallback];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      clearTimeout(timeoutId);
+    };
+
+    window[nomeCallback] = (data) => {
+      if (finalizado) return;
+      finalizado = true;
+      limpar();
+      resolve(data);
+    };
+
+    script.onerror = () => {
+      if (finalizado) return;
+      finalizado = true;
+      limpar();
+      reject(new Error('Falha de rede (JSONP)'));
+    };
+
+    const timeoutId = setTimeout(() => {
+      if (finalizado) return;
+      finalizado = true;
+      limpar();
+      reject(new Error('Tempo esgotado'));
+    }, 15000);
+
+    const url = API_URL +
+      '?action=' + encodeURIComponent(action) +
+      '&params=' + encodeURIComponent(JSON.stringify(params || [])) +
+      '&callback=' + nomeCallback;
+    script.src = url;
+    document.body.appendChild(script);
+  });
 }
 
 // Chamada "principal": tenta na hora. Se falhar (sem sinal),
