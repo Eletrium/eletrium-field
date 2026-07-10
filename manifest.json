@@ -1,0 +1,22 @@
+{
+  "name": "Eletrium Field",
+  "short_name": "Eletrium",
+  "description": "App de campo para técnicos da Eletrium — controle de OS, KM e checklist NR-10",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0D1117",
+  "theme_color": "#0D1117",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

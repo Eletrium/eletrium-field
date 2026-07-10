@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0D1117">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Eletrium Field</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0D1117;
+  --bg2:#161B22;
+  --bg3:#21262D;
+  --green:#22B573;
+  --green2:#1A9A60;
+  --red:#E74C3C;
+  --yellow:#F39C12;
+  --gray:#8B949E;
+  --text:#E6EDF3;
+  --text2:#B3C0CC;
+  --border:#30363D;
+  --radius:12px;
+  --shadow:0 4px 20px rgba(0,0,0,.5);
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;overflow-x:hidden}
+.screen{display:none;min-height:100vh;flex-direction:column}
+.screen.active{display:flex}
+.hdr{background:var(--bg2);padding:14px 16px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+.hdr-back{width:40px;height:40px;background:var(--bg3);border:none;border-radius:8px;color:var(--text);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.hdr-title{flex:1;font-size:18px;font-weight:700;color:var(--text)}
+.hdr-sub{font-size:12px;color:var(--gray);margin-top:1px}
+.content{flex:1;padding:16px;overflow-y:auto;padding-bottom:80px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.card-title{font-size:13px;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.card-value{font-size:22px;font-weight:700;color:var(--text)}
+.card-sub{font-size:13px;color:var(--gray);margin-top:4px}
+.btn{width:100%;padding:18px;border:none;border-radius:var(--radius);font-size:17px;font-weight:700;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:10px;transition:opacity .15s,transform .1s}
+.btn:active{transform:scale(.97);opacity:.9}
+.btn-green{background:var(--green);color:#fff}
+.btn-red{background:var(--red);color:#fff}
+.btn-yellow{background:var(--yellow);color:#fff}
+.btn-gray{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+.btn-outline{background:transparent;color:var(--green);border:2px solid var(--green)}
+.btn-sm{padding:12px;font-size:15px}
+.btn-disabled{opacity:.4;pointer-events:none}
+.timer-block{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center;margin-bottom:16px}
+.timer-label{font-size:12px;color:var(--gray);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.timer-display{font-size:54px;font-weight:800;color:var(--green);letter-spacing:2px;font-variant-numeric:tabular-nums}
+.timer-display.paused{color:var(--yellow)}
+.timer-os{font-size:14px;color:var(--text2);margin-top:6px}
+.os-item{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;cursor:pointer;transition:border-color .15s}
+.os-item:active{border-color:var(--green)}
+.os-item.active-os{border-color:var(--green);border-width:2px}
+.os-item.paused-os{border-color:var(--yellow);border-width:2px}
+.os-id{font-size:11px;color:var(--gray);margin-bottom:4px}
+.os-cliente{font-size:16px;font-weight:700;color:var(--text)}
+.os-desc{font-size:13px;color:var(--text2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.os-badges{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.badge{font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px}
+.badge-green{background:rgba(34,181,115,.2);color:var(--green)}
+.badge-yellow{background:rgba(243,156,18,.2);color:var(--yellow)}
+.badge-red{background:rgba(231,76,60,.2);color:var(--red)}
+.badge-gray{background:var(--bg3);color:var(--gray)}
+.form-group{margin-bottom:14px}
+.form-label{font-size:13px;color:var(--gray);margin-bottom:6px;display:block;font-weight:600}
+.form-input,.form-select,.form-textarea{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:16px;padding:14px;outline:none;transition:border-color .2s}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--green)}
+.form-textarea{min-height:80px;resize:vertical;font-family:inherit}
+.form-select option{background:var(--bg3)}
+.motivo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.motivo-btn{background:var(--bg3);border:2px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-weight:600;padding:16px 10px;cursor:pointer;text-align:center;transition:all .15s;line-height:1.3}
+.motivo-btn:active,.motivo-btn.selected{border-color:var(--green);background:rgba(34,181,115,.1);color:var(--green)}
+.motivo-btn .motivo-icon{font-size:24px;display:block;margin-bottom:6px}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.stat-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+.stat-val{font-size:22px;font-weight:800;color:var(--green)}
+.stat-lbl{font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+.progress-bar{height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin:8px 0}
+.progress-fill{height:100%;background:var(--green);border-radius:4px;transition:width .5s}
+.divider{height:1px;background:var(--border);margin:16px 0}
+.alert{background:rgba(34,181,115,.1);border:1px solid rgba(34,181,115,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--green);margin-bottom:12px;display:flex;gap:8px}
+.alert-warn{background:rgba(243,156,18,.1);border-color:rgba(243,156,18,.3);color:var(--yellow)}
+.alert-err{background:rgba(231,76,60,.1);border-color:rgba(231,76,60,.3);color:var(--red)}
+#loading{display:none;position:fixed;inset:0;background:rgba(13,17,23,.85);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:16px}
+#loading.show{display:flex}
+.spinner{width:44px;height:44px;border:4px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-msg{color:var(--gray);font-size:14px}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--bg2);border:1px solid var(--green);color:var(--text);padding:12px 20px;border-radius:40px;font-size:14px;font-weight:600;z-index:1000;transition:transform .3s,opacity .3s;opacity:0;white-space:nowrap}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+#toast.err{border-color:var(--red);color:var(--red)}
+.tec-btn{background:var(--bg2);border:2px solid var(--border);border-radius:var(--radius);padding:18px;display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:10px;transition:all .15s}
+.tec-btn:active,.tec-btn.selected{border-color:var(--green)}
+.tec-avatar{width:44px;height:44px;background:var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff;flex-shrink:0}
+.tec-nome{font-size:17px;font-weight:700;color:var(--text)}
+.tec-id{font-size:12px;color:var(--gray)}
+.pct-display{font-size:36px;font-weight:800;color:var(--green);text-align:center;margin:8px 0}
+input[type=range]{width:100%;height:44px;accent-color:var(--green);cursor:pointer}
+.bottom-cta{position:fixed;bottom:0;left:0;right:0;padding:12px 16px 24px;background:linear-gradient(transparent,var(--bg) 30%)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
+.dot-green{background:var(--green)}
+.dot-yellow{background:var(--yellow)}
+.dot-gray{background:var(--gray)}
+.status-badge{display:inline-block;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700}
+.badge-neutro{background:var(--bg3);color:var(--gray)}
+.badge-aprovado{background:rgba(34,181,115,.15);color:var(--green);border:1px solid rgba(34,181,115,.3)}
+.badge-pendente{background:rgba(243,156,18,.15);color:var(--yellow);border:1px solid rgba(243,156,18,.3)}
+.badge-rejeitado{background:rgba(231,76,60,.15);color:var(--red);border:1px solid rgba(231,76,60,.3)}
+#offline-banner{display:none;background:var(--yellow);color:#000;text-align:center;font-size:12px;font-weight:700;padding:6px;position:sticky;top:0;z-index:200}
+#offline-banner.show{display:block}
+</style>
+</head>
+<body>
+
+<div id="offline-banner">SEM CONEXÃO — dados serão enviados quando o sinal voltar</div>
+<div id="loading"><div class="spinner"></div><div class="loading-msg" id="loading-msg">Aguarde...</div></div>
+<div id="toast"></div>
+
+<!-- TELA 0: INICIO DO DIA -->
+<div id="scr-inicio-dia" class="screen">
+  <div class="hdr">
+    <div style="flex:1">
+      <div class="hdr-title">Inicio do Dia</div>
+      <div class="hdr-sub" id="inicio-sub">Bom dia!</div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="card" id="card-veiculo-pergunta">
+      <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text)">
+        Voce esta usando seu veiculo proprio hoje?
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <button class="btn btn-green" style="margin-bottom:0" onclick="responderVeiculo(true)">Sim, veiculo proprio</button>
+        <button class="btn btn-gray" style="margin-bottom:0" onclick="responderVeiculo(false)">Nao</button>
+      </div>
+    </div>
+    <div id="card-km" style="display:none">
+      <div class="divider"></div>
+      <div class="form-group">
+        <label class="form-label">KM inicial do veiculo (odometro)</label>
+        <input class="form-input" type="number" id="inicio-km" placeholder="Ex: 12450" inputmode="numeric" min="0" step="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Placa / Identificacao do veiculo <span style="color:var(--gray)">(opcional)</span></label>
+        <input class="form-input" id="inicio-veiculo-id" placeholder="Ex: ABC-1234 ou Moto Honda">
+      </div>
+      <button class="btn btn-green" onclick="confirmarInicioDia(true)">INICIAR DIA</button>
+    </div>
+    <div id="card-sem-km" style="display:none">
+      <button class="btn btn-green" onclick="confirmarInicioDia(false)">INICIAR DIA</button>
+    </div>
+    <div id="card-sem-veiculo" style="display:none">
+      <div class="divider"></div>
+      <div class="card" style="border-color:var(--yellow)">
+        <div style="font-size:14px;font-weight:700;color:var(--yellow);margin-bottom:8px">Veiculo nao cadastrado</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:16px" id="sem-veiculo-msg">
+          Voce ainda nao tem veiculo cadastrado ou aprovado. Cadastre agora para registrar o KM e receber o reembolso.
+        </div>
+        <button class="btn btn-outline btn-sm" style="margin-bottom:8px" onclick="irParaMeuVeiculo('scr-inicio-dia')">CADASTRAR VEICULO</button>
+        <button class="btn btn-gray btn-sm" onclick="confirmarInicioDia(false)">Continuar sem KM</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TELA 1: LOGIN -->
+<div id="scr-login" class="screen active">
+  <div class="hdr">
+    <div style="flex:1">
+      <div class="hdr-title">Eletrium Field</div>
+      <div class="hdr-sub">Selecione seu nome para comecar</div>
+    </div>
+  </div>
+  <div class="content">
+    <div id="login-tecnicos"></div>
+    <div id="login-erro" class="alert alert-err" style="display:none">Erro ao carregar tecnicos</div>
+  </div>
+</div>
+
+<!-- TELA 2: HOME -->
+<div id="scr-home" class="screen">
+  <div class="hdr">
+    <div style="flex:1">
+      <div class="hdr-title" id="home-titulo">Minhas OS</div>
+      <div class="hdr-sub" id="home-sub">Hoje</div>
+    </div>
+    <button class="hdr-back" onclick="irParaMeuVeiculo('scr-home')" title="Meu Veiculo" style="font-size:18px">V</button>
+    <button class="hdr-back" onclick="irParaResumo()" title="Resumo do dia">S</button>
+    <button class="hdr-back" onclick="logOut()" title="Trocar tecnico">U</button>
+  </div>
+  <div class="content">
+    <div id="home-timer-block" style="display:none">
+      <div class="timer-block">
+        <div class="timer-label">OS ATIVA</div>
+        <div class="timer-display" id="home-timer">00:00:00</div>
+        <div class="timer-os" id="home-timer-os"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+        <button class="btn btn-yellow btn-sm" onclick="irParaPausar()">PAUSAR</button>
+        <button class="btn btn-red btn-sm" onclick="irParaEncerrar()">ENCERRAR</button>
+      </div>
+    </div>
+    <div id="home-pausa-block" style="display:none">
+      <div class="alert alert-warn">
+        <span>P</span>
+        <div><strong>OS pausada:</strong> <span id="home-pausa-motivo"></span><br>
+        <button onclick="irParaPausada()" style="background:none;border:none;color:var(--yellow);font-weight:700;padding:4px 0;cursor:pointer;font-size:13px">Ver OS pausada</button></div>
+      </div>
+    </div>
+    <div id="home-os-lista">
+      <div class="card" style="text-align:center;padding:32px">
+        <div style="color:var(--gray)">Carregando ordens de servico...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TELA 3: OS ATIVA -->
+<div id="scr-os-ativa" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-home')">&#8249;</button>
+    <div style="flex:1">
+      <div class="hdr-title" id="ativa-id"></div>
+      <div class="hdr-sub" id="ativa-cliente"></div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="timer-block">
+      <div class="timer-label">TEMPO PRODUTIVO</div>
+      <div class="timer-display" id="ativa-timer">00:00:00</div>
+      <div class="timer-os" id="ativa-desc"></div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-box"><div class="stat-val" id="ativa-realizado">0</div><div class="stat-lbl" id="ativa-unidade">Realizado</div></div>
+      <div class="stat-box"><div class="stat-val" id="ativa-meta">0</div><div class="stat-lbl">Meta</div></div>
+      <div class="stat-box"><div class="stat-val" id="ativa-pct">0%</div><div class="stat-lbl">Progresso</div></div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="ativa-progress" style="width:0%"></div></div>
+    <div class="divider"></div>
+    <button class="btn btn-yellow" onclick="irParaPausar()">PAUSAR OS</button>
+    <button class="btn btn-red" onclick="irParaEncerrar()">ENCERRAR OS</button>
+    <button class="btn btn-outline btn-sm" onclick="irParaChecklist()">Iniciar Checklist NR-10</button>
+    <button class="btn btn-gray btn-sm" onclick="irParaEmergencia()">OS Emergencia (mesmo cliente)</button>
+  </div>
+</div>
+
+<!-- TELA 4: PAUSAR -->
+<div id="scr-pausar" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-os-ativa')">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">Pausar OS</div><div class="hdr-sub" id="pausar-id"></div></div>
+  </div>
+  <div class="content">
+    <div class="card-title" style="margin-bottom:12px">Motivo da interrupcao</div>
+    <div class="motivo-grid">
+      <button class="motivo-btn" onclick="selecionarMotivo('Almoco')"><span class="motivo-icon">A</span>Almoco</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Deslocamento')"><span class="motivo-icon">D</span>Deslocamento</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Material')"><span class="motivo-icon">M</span>Buscar material</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Tecnico')"><span class="motivo-icon">T</span>Problema tecnico</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Cliente')"><span class="motivo-icon">C</span>Aguardando cliente</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('OS Emergencia')"><span class="motivo-icon">!</span>OS Emergencia</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Reuniao')"><span class="motivo-icon">R</span>Reuniao</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Outro')"><span class="motivo-icon">?</span>Outro</button>
+    </div>
+    <div class="form-group" id="pausar-outro-grupo" style="display:none">
+      <label class="form-label">Descreva o motivo</label>
+      <input class="form-input" id="pausar-outro-texto" placeholder="Ex: Chuva forte..." maxlength="100">
+    </div>
+    <button class="btn btn-yellow" id="btn-confirmar-pausa" onclick="confirmarPausa()" disabled style="opacity:.5">CONFIRMAR PAUSA</button>
+  </div>
+</div>
+
+<!-- TELA 5: PAUSADA -->
+<div id="scr-pausada" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-home')">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">OS Pausada</div><div class="hdr-sub" id="pausada-id"></div></div>
+  </div>
+  <div class="content">
+    <div class="card"><div class="card-title">Motivo da pausa</div><div class="card-value" id="pausada-motivo" style="font-size:18px"></div></div>
+    <div class="card"><div class="card-title">Tempo produtivo acumulado</div><div class="card-value" id="pausada-horas" style="color:var(--green)"></div></div>
+    <div class="divider"></div>
+    <button class="btn btn-green" onclick="confirmarRetomar()">RETOMAR OS</button>
+    <button class="btn btn-gray btn-sm" onclick="irParaEmergencia()">Criar OS Emergencia</button>
+    <button class="btn btn-red btn-sm" onclick="irParaEncerrar()">Encerrar esta OS</button>
+  </div>
+</div>
+
+<!-- TELA 6: EMERGENCIA -->
+<div id="scr-emergencia" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar(APP.osAtiva ? 'scr-os-ativa' : 'scr-pausada')">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">OS Emergencia</div><div class="hdr-sub">Mesmo cliente - novo chamado</div></div>
+  </div>
+  <div class="content">
+    <div class="alert alert-warn">A OS atual sera pausada automaticamente ao criar a emergencia.</div>
+    <div class="form-group"><label class="form-label">Descricao do problema</label><textarea class="form-textarea" id="emg-desc" placeholder="Descreva o problema de emergencia..." rows="4"></textarea></div>
+    <div class="form-group"><label class="form-label">Local</label><input class="form-input" id="emg-local" placeholder="Ex: Sala 302, Painel principal..."></div>
+    <button class="btn btn-red" onclick="confirmarEmergencia()">CRIAR OS EMERGENCIA</button>
+    <button class="btn btn-gray btn-sm" onclick="voltar(APP.osAtiva ? 'scr-os-ativa' : 'scr-pausada')">Cancelar</button>
+  </div>
+</div>
+
+<!-- TELA 7: ENCERRAR -->
+<div id="scr-encerrar" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar(APP.osAtiva ? 'scr-os-ativa' : 'scr-pausada')">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">Encerrar OS</div><div class="hdr-sub" id="enc-id"></div></div>
+  </div>
+  <div class="content">
+    <div class="form-group"><label class="form-label">Quantidade realizada hoje</label><input class="form-input" type="number" id="enc-qtd" placeholder="0" min="0" oninput="calcularPct()"></div>
+    <div class="form-group">
+      <label class="form-label">% Acumulado da OS completa</label>
+      <div class="pct-display"><span id="enc-pct-num">0</span>%</div>
+      <input type="range" id="enc-pct" min="0" max="100" value="0" oninput="document.getElementById('enc-pct-num').textContent=this.value">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray)"><span>0%</span><span>50%</span><span>100%</span></div>
+    </div>
+    <div class="divider"></div>
+    <div class="form-group"><label class="form-label">Observacoes do campo</label><textarea class="form-textarea" id="enc-obs" placeholder="O que foi feito, pendencias, observacoes..."></textarea></div>
+    <div class="form-group"><label class="form-label">Materiais utilizados</label><input class="form-input" id="enc-materiais" placeholder="Ex: 2m cabo 6mm, 3 terminais..."></div>
+    <div class="form-group"><label class="form-label">Proximo passo</label><input class="form-input" id="enc-proximo" placeholder="Ex: Aguardar entrega, agendar retorno..."></div>
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div><div style="font-size:14px;font-weight:700">Nao conformidade</div><div style="font-size:12px;color:var(--gray);margin-top:2px">Reportar problema detectado</div></div>
+        <label style="position:relative;width:52px;height:28px;cursor:pointer">
+          <input type="checkbox" id="enc-nc" style="opacity:0;position:absolute">
+          <span id="enc-nc-track" style="position:absolute;inset:0;background:var(--bg3);border-radius:14px;border:1px solid var(--border);transition:.2s"></span>
+          <span id="enc-nc-thumb" style="position:absolute;top:3px;left:3px;width:22px;height:22px;background:var(--gray);border-radius:50%;transition:.2s"></span>
+        </label>
+      </div>
+    </div>
+    <button class="btn btn-green" onclick="confirmarEncerramento()">CONCLUIR OS</button>
+  </div>
+</div>
+
+<!-- TELA 7B: CHECKLIST NR-10 -->
+<div id="scr-checklist" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltarDaChecklist()">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">Checklist NR-10</div><div class="hdr-sub" id="chk-progresso">Carregando...</div></div>
+  </div>
+  <div class="content">
+    <div id="chk-loading" class="card" style="text-align:center;padding:32px"><div style="color:var(--gray)">Carregando perguntas...</div></div>
+    <div id="chk-pergunta-block" style="display:none">
+      <div class="card" style="border-color:var(--yellow);margin-bottom:16px">
+        <div class="card-title" id="chk-tipo-resp" style="margin-bottom:4px">SELECIONE UMA OPCAO</div>
+        <div style="font-size:18px;font-weight:600;color:var(--text);line-height:1.4" id="chk-texto-perg"></div>
+      </div>
+      <div id="chk-opcoes"></div>
+      <button id="chk-btn-confirmar" class="btn btn-green" style="display:none;margin-top:8px" onclick="confirmarMultipla()">CONFIRMAR SELECAO</button>
+      <div id="chk-foto-aviso" style="display:none;margin-top:12px;padding:12px;background:var(--bg3);border-radius:var(--radius);border:1px solid var(--yellow);color:var(--yellow);font-size:14px">
+        Foto obrigatoria para esta pergunta. Capture a evidencia antes de continuar.
+      </div>
+    </div>
+    <div id="chk-resumo-block" style="display:none">
+      <div class="card" style="border-color:var(--green);text-align:center;padding:24px;margin-bottom:16px">
+        <div style="font-size:36px;margin-bottom:8px">OK</div>
+        <div style="font-size:18px;font-weight:700;color:var(--green)">Checklist Concluido!</div>
+        <div style="font-size:14px;color:var(--gray);margin-top:4px" id="chk-resumo-qtd"></div>
+      </div>
+      <div id="chk-nc-aviso" style="display:none" class="card" style="border-color:var(--red);padding:14px;margin-bottom:16px">
+        <div style="color:var(--red);font-weight:700;margin-bottom:4px">Nao Conformidade Detectada</div>
+        <div style="color:var(--text2);font-size:13px">Uma ou mais respostas indicam nao conformidade. Registre no encerramento da OS.</div>
+      </div>
+      <button class="btn btn-green" onclick="concluirChecklist()">VOLTAR PARA OS</button>
+    </div>
+  </div>
+</div>
+
+<!-- TELA 8: RESUMO DO DIA -->
+<div id="scr-resumo" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-home')">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">Resumo do Dia</div><div class="hdr-sub" id="resumo-sub"></div></div>
+  </div>
+  <div class="content">
+    <div id="resumo-vazio" style="display:none" class="card" style="text-align:center;padding:32px"><div style="color:var(--gray)">Nenhuma OS encerrada hoje</div></div>
+    <div id="resumo-dados">
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-val" id="res-horas">0h00</div><div class="stat-lbl">Prod.</div></div>
+        <div class="stat-box"><div class="stat-val" id="res-os">0</div><div class="stat-lbl">OS</div></div>
+        <div class="stat-box"><div class="stat-val" id="res-pauses">0</div><div class="stat-lbl">Pausas</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Horario</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><div style="font-size:12px;color:var(--gray)">Entrada</div><div style="font-size:22px;font-weight:800;color:var(--text)" id="res-entrada">--:--</div></div>
+          <div style="color:var(--gray);font-size:24px">&#8594;</div>
+          <div style="text-align:right"><div style="font-size:12px;color:var(--gray)">Ultima OS</div><div style="font-size:22px;font-weight:800;color:var(--text)" id="res-saida">--:--</div></div>
+        </div>
+      </div>
+      <div class="card"><div class="card-title">Clientes atendidos</div><div id="res-clientes" style="font-size:14px;color:var(--text2)"></div></div>
+      <div class="card"><div class="card-title">Status do dia</div><div class="card-value" id="res-status" style="font-size:16px;color:var(--green)"></div></div>
+      <div id="resumo-km-block" style="display:none">
+        <div class="divider"></div>
+        <div class="card" style="border-color:var(--yellow)">
+          <div class="card-title" style="color:var(--yellow)">KM Final do dia</div>
+          <div class="form-group" style="margin-bottom:8px"><label class="form-label">Odometro agora</label><input class="form-input" type="number" id="resumo-km-final" placeholder="Ex: 12520" inputmode="numeric" min="0" step="1"></div>
+          <button class="btn btn-yellow btn-sm" onclick="confirmarFimDia()">REGISTRAR KM E ENCERRAR DIA</button>
+        </div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <button class="btn btn-gray btn-sm" onclick="logOut()">Trocar tecnico</button>
+  </div>
+</div>
+
+<!-- TELA 9: MEU VEICULO -->
+<div id="scr-meu-veiculo" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltarMeuVeiculo()">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">Meu Veiculo</div><div class="hdr-sub" id="veiculo-sub">Autocadastro</div></div>
+  </div>
+  <div class="content">
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">STATUS DO CADASTRO</div>
+      <div id="veiculo-status-badge" style="margin-top:6px"><span class="status-badge badge-neutro">Carregando...</span></div>
+      <div id="veiculo-status-msg" style="font-size:13px;color:var(--text2);margin-top:10px;display:none"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Tipo de veiculo</label>
+      <select class="form-select" id="veiculo-tipo">
+        <option value="Carro proprio">Carro proprio</option>
+        <option value="Moto propria">Moto propria</option>
+        <option value="Caminhonete propria">Caminhonete propria</option>
+        <option value="Outros">Outros</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Placa</label><input class="form-input" id="veiculo-placa" placeholder="Ex: ABC-1234" maxlength="10" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
+    <div class="form-group"><label class="form-label">Modelo</label><input class="form-input" id="veiculo-modelo" placeholder="Ex: Gol 2019, Honda CG 160..."></div>
+    <button class="btn btn-green" onclick="salvarVeiculo()">SALVAR VEICULO</button>
+    <div id="veiculo-aviso-aprovado" style="display:none" class="alert"><span>OK</span><div id="veiculo-aviso-texto" style="font-size:13px"></div></div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// PONTE COM O BACKEND — substitui google.script.run
+// ================================================================
+// Cole aqui a URL do Web App do Apps Script (Implantar > Nova
+// implantação > Tipo: App da Web > Executar como: Eu > Acesso:
+// Qualquer pessoa). Deve terminar em /exec
+const API_URL = 'COLE_AQUI_A_URL_DO_APPS_SCRIPT_/exec';
+
+// IndexedDB simples para fila offline
+const DB_NAME = 'eletrium_offline';
+const STORE_NAME = 'fila_sync';
+let dbPromise = null;
+
+function abrirDB() {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+    req.onblocked = () => resolve(null);
+  });
+  return dbPromise;
+}
+
+async function enfileirarChamada(action, params) {
+  const db = await abrirDB();
+  if (!db) return;
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).add({ action, params, ts: Date.now() });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
+}
+
+async function processarFilaOffline() {
+  const db = await abrirDB();
+  if (!db) return;
+  const tx = db.transaction(STORE_NAME, 'readonly');
+  const itens = await new Promise((resolve) => {
+    const req = tx.objectStore(STORE_NAME).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => resolve([]);
+  });
+  for (const item of itens) {
+    try {
+      await gsCallReal(item.action, item.params);
+      const txDel = db.transaction(STORE_NAME, 'readwrite');
+      txDel.objectStore(STORE_NAME).delete(item.id);
+    } catch (e) {
+      break; // ainda sem sinal, tenta de novo depois
+    }
+  }
+}
+
+function gsCallReal(action, params) {
+  return fetch(API_URL, {
+    method: 'POST',
+    // Content-Type "text/plain" evita o preflight de CORS
+    // (Apps Script não responde bem a OPTIONS). O corpo
+    // continua sendo JSON de verdade, só a Content-Type
+    // declarada muda.
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action, params: params || [] })
+  }).then(res => res.json());
+}
+
+// Chamada "principal": tenta na hora. Se falhar (sem sinal),
+// enfileira no IndexedDB para sincronizar depois.
+function gsCall(action, params, opts) {
+  opts = opts || {};
+  return gsCallReal(action, params).catch(err => {
+    if (opts.enfileiravelSeOffline) {
+      enfileirarChamada(action, params);
+      return { sucesso: true, offline: true };
+    }
+    throw err;
+  });
+}
+
+// ================================================================
+// ESTADO GLOBAL
+// ================================================================
+const APP = {
+  tecnico: null, osAtiva: null, osPausada: null, osList: [],
+  timerInterval: null, timerSec: 0, motivoSelecionado: null,
+  usaVeiculoHoje: null, kmInicial: null, veiculo: undefined,
+  veiculoOrigem: 'scr-home'
+};
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const tela = document.getElementById(id);
+  if (tela) { tela.classList.add('active'); window.scrollTo(0,0); }
+}
+function voltar(id) { showScreen(id); }
+
+function showLoading(msg) {
+  document.getElementById('loading-msg').textContent = msg || 'Aguarde...';
+  document.getElementById('loading').classList.add('show');
+}
+function hideLoading() { document.getElementById('loading').classList.remove('show'); }
+
+function toast(msg, isErr) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (isErr ? ' err' : '');
+  setTimeout(() => { el.className = ''; }, 3000);
+}
+
+// ================================================================
+// CRONOMETRO (identico ao original, so client-side)
+// ================================================================
+const LS_TIMER_KEY = 'eletrium_timer';
+function salvarTimerLS(osId, inicioTs, horasJaAcum, pausado) {
+  localStorage.setItem(LS_TIMER_KEY, JSON.stringify({ osId, inicioTs, horasJaAcum: horasJaAcum || 0, pausado: !!pausado }));
+}
+function lerTimerLS() { try { return JSON.parse(localStorage.getItem(LS_TIMER_KEY)) || null; } catch(e) { return null; } }
+function limparTimerLS() { localStorage.removeItem(LS_TIMER_KEY); }
+
+function iniciarCronometro(horasJaAcum) {
+  pararCronometro();
+  const ref = Date.now();
+  const baseMs = (horasJaAcum || 0) * 3600000;
+  APP.timerInterval = setInterval(() => atualizarDisplay(Date.now() - ref + baseMs), 500);
+  if (APP.osAtiva) salvarTimerLS(APP.osAtiva.id, ref - baseMs, horasJaAcum || 0, false);
+}
+function pararCronometro() { if (APP.timerInterval) { clearInterval(APP.timerInterval); APP.timerInterval = null; } }
+function atualizarDisplay(ms) {
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+  const str = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  const el1 = document.getElementById('home-timer'), el2 = document.getElementById('ativa-timer');
+  if (el1) el1.textContent = str;
+  if (el2) el2.textContent = str;
+}
+function restaurarCronometroAoCarregar() {
+  const ts = lerTimerLS();
+  if (!ts) return;
+  if (APP.osAtiva && ts.osId === APP.osAtiva.id && !ts.pausado) iniciarCronometro((Date.now() - ts.inicioTs) / 3600000);
+}
+
+// ================================================================
+// INICIO DO DIA
+// ================================================================
+function irParaInicioDia() {
+  const nome = APP.tecnico ? APP.tecnico.nome.split(' ')[0] : '';
+  document.getElementById('inicio-sub').textContent = 'Bom dia, ' + nome + '!';
+  document.getElementById('card-veiculo-pergunta').style.display = 'block';
+  document.getElementById('card-km').style.display = 'none';
+  document.getElementById('card-sem-km').style.display = 'none';
+  document.getElementById('card-sem-veiculo').style.display = 'none';
+  const antigoAviso = document.getElementById('card-km').querySelector('.aviso-pendente-veiculo');
+  if (antigoAviso) antigoAviso.remove();
+  document.getElementById('inicio-km').value = '';
+  document.getElementById('inicio-veiculo-id').value = '';
+  APP.usaVeiculoHoje = null;
+  showScreen('scr-inicio-dia');
+}
+
+function responderVeiculo(usa) {
+  APP.usaVeiculoHoje = usa;
+  document.getElementById('card-veiculo-pergunta').style.display = 'none';
+  document.getElementById('card-sem-veiculo').style.display = 'none';
+  if (!usa) {
+    document.getElementById('card-km').style.display = 'none';
+    document.getElementById('card-sem-km').style.display = 'block';
+    return;
+  }
+  if (APP.veiculo !== undefined) { _mostrarFluxoKM(APP.veiculo); return; }
+  showLoading('Verificando veiculo...');
+  gsCall('getVeiculoDoTecnico', [APP.tecnico.id]).then(v => {
+    hideLoading();
+    APP.veiculo = v;
+    _mostrarFluxoKM(v);
+  }).catch(() => {
+    hideLoading();
+    document.getElementById('card-km').style.display = 'block';
+    setTimeout(() => document.getElementById('inicio-km').focus(), 100);
+  });
+}
+
+function _mostrarFluxoKM(veiculo) {
+  const semVeiculoEl = document.getElementById('card-sem-veiculo');
+  const kmEl = document.getElementById('card-km');
+  const semKmEl = document.getElementById('card-sem-km');
+  if (!veiculo || veiculo.statusAprovacao === 'Rejeitado') {
+    const msg = (veiculo && veiculo.statusAprovacao === 'Rejeitado')
+      ? 'Seu cadastro de veiculo foi rejeitado. Cadastre novamente para receber o reembolso de KM.'
+      : 'Voce ainda nao tem veiculo cadastrado ou aprovado. Cadastre agora para registrar o KM e receber o reembolso.';
+    document.getElementById('sem-veiculo-msg').textContent = msg;
+    semVeiculoEl.style.display = 'block'; kmEl.style.display = 'none'; semKmEl.style.display = 'none';
+    return;
+  }
+  semVeiculoEl.style.display = 'none'; semKmEl.style.display = 'none';
+  const antigoAviso = kmEl.querySelector('.aviso-pendente-veiculo');
+  if (antigoAviso) antigoAviso.remove();
+  if (veiculo.statusAprovacao === 'Pendente' || veiculo.alteracaoPendente) {
+    const aviso = document.createElement('div');
+    aviso.className = 'alert alert-warn aviso-pendente-veiculo';
+    aviso.style.marginBottom = '12px';
+    aviso.innerHTML = '<span>!</span><span>Veiculo aguardando aprovacao do gestor. O KM sera registrado normalmente, mas o reembolso so sera calculado apos a aprovacao.</span>';
+    kmEl.insertBefore(aviso, kmEl.firstChild);
+  }
+  const veiculoIdEl = document.getElementById('inicio-veiculo-id');
+  if (veiculo.placa && !veiculoIdEl.value) veiculoIdEl.value = veiculo.placa + (veiculo.modelo ? ' - ' + veiculo.modelo : '');
+  kmEl.style.display = 'block';
+  setTimeout(() => document.getElementById('inicio-km').focus(), 100);
+}
+
+function confirmarInicioDia(usaVeiculo) {
+  let kmInicial = null, veiculoId = null;
+  if (usaVeiculo) {
+    const kmVal = document.getElementById('inicio-km').value.trim();
+    if (!kmVal) { toast('Informe o KM inicial do odometro', true); return; }
+    kmInicial = kmVal;
+    veiculoId = document.getElementById('inicio-veiculo-id').value.trim() || null;
+  }
+  showLoading('Registrando inicio do dia...');
+  gsCall('registrarInicioDia', [APP.tecnico.id, APP.tecnico.nome, usaVeiculo, kmInicial, veiculoId], { enfileiravelSeOffline: true })
+    .then(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      APP.usaVeiculoHoje = usaVeiculo; APP.kmInicial = kmInicial;
+      toast(res.offline ? 'Dia iniciado (offline — sincroniza depois)' : 'Dia iniciado as ' + res.hora);
+      carregarHome();
+    }).catch(() => { hideLoading(); toast('Erro ao iniciar dia', true); });
+}
+
+// ================================================================
+// GEOLOCALIZACAO
+// ================================================================
+function capturarGeolocalizacao(callback) {
+  if (!navigator.geolocation) { callback(null, null); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => callback(pos.coords.latitude.toFixed(6), pos.coords.longitude.toFixed(6)),
+    () => callback(null, null),
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+  );
+}
+
+// ================================================================
+// FIM DO DIA
+// ================================================================
+function confirmarFimDia() {
+  const kmFinal = document.getElementById('resumo-km-final').value.trim();
+  if (!kmFinal) { toast('Informe o KM final do odometro', true); return; }
+  showLoading('Registrando KM final...');
+  gsCall('registrarFimDia', [APP.tecnico.id, kmFinal], { enfileiravelSeOffline: true })
+    .then(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      document.getElementById('resumo-km-block').style.display = 'none';
+      toast(res.offline ? 'Registrado (offline — sincroniza depois)' :
+        (res.kmRodado > 0 ? 'Dia encerrado — ' + res.kmRodado + ' km rodados' : 'Dia encerrado as ' + res.hora));
+    }).catch(() => { hideLoading(); toast('Erro ao registrar KM', true); });
+}
+
+// ================================================================
+// LOGIN
+// ================================================================
+function carregarTecnicos() {
+  showLoading('Carregando tecnicos...');
+  gsCall('getTecnicos', []).then(renderTecnicos).catch(errTecnicos);
+}
+function renderTecnicos(lista) {
+  hideLoading();
+  const container = document.getElementById('login-tecnicos');
+  if (!lista || !lista.length) { document.getElementById('login-erro').style.display = 'flex'; return; }
+  container.innerHTML = '';
+  lista.forEach(tec => {
+    const iniciais = tec.nome.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
+    const el = document.createElement('div');
+    el.className = 'tec-btn';
+    el.innerHTML = '<div class="tec-avatar">' + iniciais + '</div>' +
+      '<div><div class="tec-nome">' + tec.nome + '</div><div class="tec-id">' + tec.id + '</div></div>' +
+      '<span style="color:var(--gray);font-size:20px;margin-left:auto">></span>';
+    el.addEventListener('click', () => entrarComoTecnico(tec));
+    container.appendChild(el);
+  });
+}
+function errTecnicos() { hideLoading(); document.getElementById('login-erro').style.display = 'flex'; }
+
+function entrarComoTecnico(tec) {
+  APP.tecnico = tec;
+  localStorage.setItem('eletrium_tecnico', JSON.stringify(tec));
+  showLoading('Verificando dia...');
+  gsCall('getDiariaHoje', [tec.id]).then(diaria => {
+    hideLoading();
+    if (!diaria || !diaria.existe) { irParaInicioDia(); }
+    else { APP.usaVeiculoHoje = diaria.usaVeiculo; APP.kmInicial = diaria.kmInicial; carregarHome(); }
+  }).catch(() => { hideLoading(); carregarHome(); });
+}
+
+function logOut() {
+  pararCronometro(); limparTimerLS();
+  APP.tecnico = null; APP.osAtiva = null; APP.osPausada = null;
+  APP.osList = []; APP.usaVeiculoHoje = null; APP.kmInicial = null;
+  APP.veiculo = undefined; APP.veiculoOrigem = 'scr-home';
+  localStorage.removeItem('eletrium_tecnico');
+  showScreen('scr-login'); carregarTecnicos();
+}
+
+// ================================================================
+// HOME
+// ================================================================
+function carregarHome() {
+  showLoading('Carregando OS...');
+  const nome = APP.tecnico ? APP.tecnico.nome.split(' ')[0] : '';
+  const hoje = new Date().toLocaleDateString('pt-BR', {weekday:'short',day:'2-digit',month:'short'});
+  document.getElementById('home-titulo').textContent = nome;
+  document.getElementById('home-sub').textContent = hoje;
+  showScreen('scr-home');
+  gsCall('getOsDoTecnico', [APP.tecnico.id]).then(renderHome).catch(() => { hideLoading(); toast('Erro ao carregar OS', true); });
+}
+
+function renderHome(lista) {
+  hideLoading();
+  APP.osList = lista || []; APP.osAtiva = null; APP.osPausada = null;
+  APP.osList.forEach(os => {
+    if (os.emPausa) { APP.osPausada = os; }
+    else if (os.statusAtual === 'Em andamento' || os.status === 'Em andamento') {
+      if (!APP.osPausada || !os.emPausa) APP.osAtiva = os;
+    }
+  });
+  const timerBlock = document.getElementById('home-timer-block');
+  const pausaBlock = document.getElementById('home-pausa-block');
+  timerBlock.style.display = APP.osAtiva ? 'block' : 'none';
+  pausaBlock.style.display = APP.osPausada ? 'block' : 'none';
+  if (APP.osAtiva) {
+    document.getElementById('home-timer-os').textContent = APP.osAtiva.cliente + ' - ' + APP.osAtiva.id;
+    iniciarCronometro(APP.osAtiva.horasProdutivas || 0);
+    restaurarCronometroAoCarregar();
+  }
+  if (APP.osPausada) document.getElementById('home-pausa-motivo').textContent = APP.osPausada.motivoPausa || 'Pausada';
+  const el = document.getElementById('home-os-lista');
+  if (!lista || !lista.length) {
+    el.innerHTML = '<div class="card" style="text-align:center;padding:32px"><div style="color:var(--gray)">Nenhuma OS para hoje</div></div>';
+    return;
+  }
+  el.innerHTML = '';
+  APP.osList.forEach(os => {
+    const isAtiva = os.statusAtual === 'Em andamento' && !os.emPausa;
+    const isPausada = os.emPausa;
+    const div = document.createElement('div');
+    div.className = 'os-item' + (isAtiva ? ' active-os' : isPausada ? ' paused-os' : '');
+    const statusBadge = isAtiva ? '<span class="badge badge-green">ATIVA</span>' :
+      isPausada ? '<span class="badge badge-yellow">PAUSADA</span>' : '<span class="badge badge-gray">Pendente</span>';
+    const priBadge = os.prioridade && os.prioridade.toLowerCase().includes('emerg') ? '<span class="badge badge-red">EMG</span>' : '';
+    div.innerHTML = '<div class="os-id">' + os.id + '</div>' +
+      '<div class="os-cliente">' + (os.cliente || 'Cliente') + '</div>' +
+      '<div class="os-desc">' + (os.descricao || '') + '</div>' +
+      '<div class="os-badges">' + statusBadge + priBadge +
+      (os.horaInicio ? '<span class="badge badge-gray">' + os.horaInicio + '</span>' : '') +
+      (os.metaDia > 0 ? '<span class="badge badge-gray">Meta: ' + os.qtdRealizada + '/' + os.metaDia + ' ' + os.unidadeMeta + '</span>' : '') +
+      '</div>';
+    div.addEventListener('click', () => abrirOS(os));
+    el.appendChild(div);
+  });
+}
+
+function abrirOS(os) {
+  if (os.emPausa) { APP.osPausada = os; irParaPausada(); return; }
+  if (os.statusAtual === 'Em andamento' && !os.emPausa) { APP.osAtiva = os; irParaOsAtiva(); return; }
+  if (!APP.osAtiva && !APP.osPausada) confirmarIniciarOS(os);
+  else toast('Encerre ou pause a OS ativa primeiro', true);
+}
+
+function confirmarIniciarOS(os) {
+  if (!confirm('Iniciar OS ' + os.id + ' para ' + os.cliente + '?')) return;
+  showLoading('Capturando localizacao...');
+  capturarGeolocalizacao((lat, lng) => {
+    showLoading('Iniciando OS...');
+    gsCall('iniciarOSComGeo', [os.id, APP.tecnico.id, APP.tecnico.nome, '', lat, lng], { enfileiravelSeOffline: true })
+      .then(res => {
+        hideLoading();
+        if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+        APP.osAtiva = os; os.horaInicio = res.hora || '--:--'; os.statusAtual = 'Em andamento';
+        toast(res.offline ? 'OS iniciada (offline)' : 'OS iniciada as ' + res.hora + (lat ? ' GPS ok' : ''));
+        carregarHome();
+      }).catch(() => { hideLoading(); toast('Erro ao iniciar OS', true); });
+  });
+}
+
+// ================================================================
+// OS ATIVA
+// ================================================================
+function irParaOsAtiva() {
+  if (!APP.osAtiva) return;
+  const os = APP.osAtiva;
+  document.getElementById('ativa-id').textContent = os.id;
+  document.getElementById('ativa-cliente').textContent = os.cliente || '';
+  document.getElementById('ativa-desc').textContent = os.descricao || '';
+  document.getElementById('ativa-realizado').textContent = os.qtdRealizada || 0;
+  document.getElementById('ativa-meta').textContent = os.metaDia || 0;
+  document.getElementById('ativa-unidade').textContent = os.unidadeMeta || 'Realizado';
+  const pct = os.pctAcumulado || 0;
+  document.getElementById('ativa-pct').textContent = pct + '%';
+  document.getElementById('ativa-progress').style.width = pct + '%';
+  showScreen('scr-os-ativa');
+}
+
+// ================================================================
+// PAUSAR
+// ================================================================
+function irParaPausar() {
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  document.getElementById('pausar-id').textContent = os.id + ' - ' + os.cliente;
+  APP.motivoSelecionado = null;
+  document.querySelectorAll('.motivo-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('pausar-outro-grupo').style.display = 'none';
+  document.getElementById('btn-confirmar-pausa').disabled = true;
+  document.getElementById('btn-confirmar-pausa').style.opacity = '.5';
+  showScreen('scr-pausar');
+}
+function selecionarMotivo(motivo) {
+  APP.motivoSelecionado = motivo;
+  document.querySelectorAll('.motivo-btn').forEach(b => {
+    b.classList.toggle('selected', b.getAttribute('onclick') && b.getAttribute('onclick').includes("'" + motivo + "'"));
+  });
+  document.getElementById('pausar-outro-grupo').style.display = motivo === 'Outro' ? 'block' : 'none';
+  const btn = document.getElementById('btn-confirmar-pausa');
+  btn.disabled = false; btn.style.opacity = '1';
+}
+function confirmarPausa() {
+  let motivo = APP.motivoSelecionado;
+  if (motivo === 'Outro') {
+    const txt = document.getElementById('pausar-outro-texto').value.trim();
+    if (!txt) { toast('Descreva o motivo', true); return; }
+    motivo = txt;
+  }
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  showLoading('Pausando OS...');
+  pararCronometro();
+  salvarTimerLS(os.id, null, 0, true);
+  gsCall('pausarOS', [os.id, APP.tecnico.id, APP.tecnico.nome, motivo, ''], { enfileiravelSeOffline: true })
+    .then(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      APP.osPausada = { ...os, emPausa: true, motivoPausa: motivo, horasProdutivas: res.horasAcumuladas };
+      APP.osAtiva = null;
+      toast(res.offline ? 'Pausada (offline)' : 'Pausada - ' + res.horasAcumuladas + ' produtivos');
+      irParaPausada();
+    }).catch(() => { hideLoading(); toast('Erro ao pausar', true); });
+}
+
+// ================================================================
+// PAUSADA
+// ================================================================
+function irParaPausada() {
+  if (!APP.osPausada) return;
+  const os = APP.osPausada;
+  document.getElementById('pausada-id').textContent = os.id + ' - ' + os.cliente;
+  document.getElementById('pausada-motivo').textContent = os.motivoPausa || 'Pausada';
+  document.getElementById('pausada-horas').textContent = os.horasProdFormatadas || os.horasProdutivas || '0h00';
+  showScreen('scr-pausada');
+}
+function confirmarRetomar() {
+  if (!APP.osPausada) return;
+  const os = APP.osPausada;
+  showLoading('Retomando OS...');
+  gsCall('retomarOS', [os.id, APP.tecnico.id, APP.tecnico.nome], { enfileiravelSeOffline: true })
+    .then(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      APP.osAtiva = { ...os, emPausa: false, statusAtual: 'Em andamento' };
+      APP.osPausada = null;
+      toast(res.offline ? 'Retomada (offline)' : 'OS retomada as ' + res.hora);
+      iniciarCronometro(0);
+      irParaOsAtiva();
+    }).catch(() => { hideLoading(); toast('Erro ao retomar', true); });
+}
+
+// ================================================================
+// EMERGENCIA
+// ================================================================
+function irParaEmergencia() {
+  document.getElementById('emg-desc').value = '';
+  document.getElementById('emg-local').value = '';
+  showScreen('scr-emergencia');
+}
+function confirmarEmergencia() {
+  const desc = document.getElementById('emg-desc').value.trim();
+  const local = document.getElementById('emg-local').value.trim();
+  if (!desc) { toast('Descreva o problema', true); return; }
+  const osOrigem = APP.osAtiva || APP.osPausada;
+  const dados = {
+    descricao: desc, local: local, tecnicoId: APP.tecnico.id, tecnicoNome: APP.tecnico.nome,
+    clienteId: osOrigem ? osOrigem.clienteId || '' : '', clienteNome: osOrigem ? osOrigem.cliente : '',
+    osOrigemId: osOrigem ? osOrigem.id : ''
+  };
+  showLoading('Criando OS emergencia...');
+  pararCronometro();
+  const pausarPrimeiro = !!APP.osAtiva;
+  const criar = () => {
+    gsCall('criarOSEmergencia', [dados], { enfileiravelSeOffline: true })
+      .then(res => {
+        hideLoading();
+        if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+        const novaOS = { id: res.osId, cliente: dados.clienteNome, descricao: desc, statusAtual: 'Em andamento',
+                         emPausa: false, horasProdutivas: 0, horaInicio: res.hora, prioridade: 'Emergencia' };
+        if (pausarPrimeiro && APP.osAtiva) APP.osPausada = { ...APP.osAtiva, emPausa: true, motivoPausa: 'OS Emergencia' };
+        APP.osAtiva = novaOS;
+        toast('OS ' + res.osId + ' criada');
+        iniciarCronometro(0);
+        irParaOsAtiva();
+      }).catch(() => { hideLoading(); toast('Erro ao criar emergencia', true); });
+  };
+  if (pausarPrimeiro && APP.osAtiva) {
+    gsCall('pausarOS', [APP.osAtiva.id, APP.tecnico.id, APP.tecnico.nome, 'OS Emergencia', ''], { enfileiravelSeOffline: true })
+      .then(() => { APP.osPausada = {...APP.osAtiva, emPausa:true, motivoPausa:'OS Emergencia'}; APP.osAtiva = null; criar(); })
+      .catch(() => criar());
+  } else { criar(); }
+}
+
+// ================================================================
+// CHECKLIST NR-10
+// ================================================================
+const CHK = {
+  osId: null, idSharePointOS: null, disciplina: 'NR-10', perguntaAtualId: null,
+  textoPergunta: '', tipoResposta: '', fotoObrigatoria: false, selecionados: [],
+  geraNC: false, totalRespostas: 0, temNC: false
+};
+
+function irParaChecklist() {
+  const os = APP.osAtiva;
+  if (!os) { toast('Nenhuma OS ativa', true); return; }
+  CHK.osId = os.id; CHK.idSharePointOS = os.idSharePoint || '';
+  CHK.disciplina = 'NR-10'; CHK.perguntaAtualId = null; CHK.totalRespostas = 0; CHK.temNC = false;
+  document.getElementById('chk-loading').style.display = 'block';
+  document.getElementById('chk-pergunta-block').style.display = 'none';
+  document.getElementById('chk-resumo-block').style.display = 'none';
+  document.getElementById('chk-progresso').textContent = 'Carregando...';
+  showScreen('scr-checklist');
+  carregarPergunta(null, null);
+}
+function voltarDaChecklist() { showScreen('scr-os-ativa'); }
+
+function carregarPergunta(perguntaAtualId, respostaDada) {
+  gsCall('getProximaPergunta', [CHK.disciplina, perguntaAtualId, respostaDada]).then(perg => {
+    document.getElementById('chk-loading').style.display = 'none';
+    if (!perg) {
+      document.getElementById('chk-pergunta-block').style.display = 'none';
+      document.getElementById('chk-resumo-block').style.display = 'block';
+      document.getElementById('chk-resumo-qtd').textContent = CHK.totalRespostas + ' pergunta(s) respondida(s)';
+      document.getElementById('chk-nc-aviso').style.display = CHK.temNC ? 'block' : 'none';
+      document.getElementById('chk-progresso').textContent = 'Concluido';
+      return;
+    }
+    CHK.perguntaAtualId = perg['ID_Pergunta'];
+    CHK.textoPergunta = perg['Texto_Pergunta'];
+    CHK.tipoResposta = perg['Tipo_Resposta'] || 'Unica';
+    CHK.fotoObrigatoria = perg['Foto_Obrigatoria'] === true || perg['Foto_Obrigatoria'] === 'TRUE';
+    CHK.selecionados = [];
+    document.getElementById('chk-progresso').textContent = 'Pergunta ' + (CHK.totalRespostas + 1);
+    document.getElementById('chk-texto-perg').textContent = CHK.textoPergunta;
+    const tipoLabel = CHK.tipoResposta === 'Multipla' ? 'SELECIONE TODAS QUE APLICAM' :
+      CHK.tipoResposta === 'Matriz_Risco' ? 'AVALIE O RISCO' : 'SELECIONE UMA OPCAO';
+    document.getElementById('chk-tipo-resp').textContent = tipoLabel;
+    document.getElementById('chk-foto-aviso').style.display = CHK.fotoObrigatoria ? 'block' : 'none';
+    document.getElementById('chk-btn-confirmar').style.display = CHK.tipoResposta === 'Multipla' ? 'block' : 'none';
+    renderizarOpcoes(perg.opcoes || []);
+    document.getElementById('chk-pergunta-block').style.display = 'block';
+  }).catch(() => { document.getElementById('chk-loading').style.display = 'none'; toast('Erro ao carregar pergunta', true); });
+}
+
+function renderizarOpcoes(opcoes) {
+  const el = document.getElementById('chk-opcoes');
+  el.innerHTML = '';
+  if (CHK.tipoResposta === 'Matriz_Risco') {
+    ['Baixo', 'Medio', 'Alto'].forEach(nivel => {
+      const b = document.createElement('button');
+      const cores = { Baixo: 'var(--green)', Medio: 'var(--yellow)', Alto: 'var(--red)' };
+      b.className = 'btn';
+      b.style.cssText = 'background:' + cores[nivel] + ';color:#fff;margin-bottom:10px';
+      b.textContent = nivel;
+      b.onclick = () => responderPergunta(nivel, false);
+      el.appendChild(b);
+    });
+    return;
+  }
+  opcoes.forEach(op => {
+    const geraNC = op['Aciona_NC'] === true || op['Aciona_NC'] === 'TRUE';
+    if (CHK.tipoResposta === 'Multipla') {
+      const label = document.createElement('label');
+      label.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;cursor:pointer';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.value = op['Texto_Opcao']; cb.dataset.nc = geraNC ? '1' : '0';
+      cb.style.cssText = 'width:20px;height:20px;accent-color:var(--green)';
+      cb.onchange = () => {
+        if (cb.checked) CHK.selecionados.push({ texto: cb.value, nc: geraNC });
+        else CHK.selecionados = CHK.selecionados.filter(s => s.texto !== cb.value);
+      };
+      const span = document.createElement('span');
+      span.style.cssText = 'font-size:16px;color:var(--text)'; span.textContent = op['Texto_Opcao'];
+      label.appendChild(cb); label.appendChild(span); el.appendChild(label);
+    } else {
+      const b = document.createElement('button');
+      b.className = 'btn btn-gray'; b.style.marginBottom = '10px'; b.textContent = op['Texto_Opcao'];
+      b.onclick = () => responderPergunta(op['Texto_Opcao'], geraNC);
+      el.appendChild(b);
+    }
+  });
+}
+
+function responderPergunta(resposta, geraNC) {
+  CHK.totalRespostas++;
+  if (geraNC) CHK.temNC = true;
+  gsCall('salvarResposta', [CHK.osId, CHK.idSharePointOS, CHK.perguntaAtualId, CHK.textoPergunta, resposta, '', APP.tecnico.nome, geraNC], { enfileiravelSeOffline: true });
+  document.getElementById('chk-loading').style.display = 'block';
+  document.getElementById('chk-pergunta-block').style.display = 'none';
+  carregarPergunta(CHK.perguntaAtualId, resposta);
+}
+function confirmarMultipla() {
+  if (CHK.selecionados.length === 0) { toast('Selecione ao menos uma opcao', true); return; }
+  const resposta = CHK.selecionados.map(s => s.texto).join('; ');
+  const geraNC = CHK.selecionados.some(s => s.nc);
+  responderPergunta(resposta, geraNC);
+}
+function concluirChecklist() {
+  showScreen('scr-os-ativa');
+  toast('Checklist concluido! ' + CHK.totalRespostas + ' perguntas respondidas');
+}
+
+// ================================================================
+// MEU VEICULO
+// ================================================================
+function irParaMeuVeiculo(origem) {
+  APP.veiculoOrigem = origem || 'scr-home';
+  document.getElementById('veiculo-status-badge').innerHTML = '<span class="status-badge badge-neutro">Carregando...</span>';
+  document.getElementById('veiculo-status-msg').style.display = 'none';
+  document.getElementById('veiculo-aviso-aprovado').style.display = 'none';
+  document.getElementById('veiculo-sub').textContent = 'Autocadastro';
+  showScreen('scr-meu-veiculo');
+  _carregarFormVeiculo();
+}
+function voltarMeuVeiculo() {
+  const origem = APP.veiculoOrigem || 'scr-home';
+  showScreen(origem);
+  if (origem === 'scr-inicio-dia' && APP.veiculo && (APP.veiculo.statusAprovacao === 'Pendente' || APP.veiculo.alteracaoPendente)) {
+    document.getElementById('card-veiculo-pergunta').style.display = 'none';
+    document.getElementById('card-sem-veiculo').style.display = 'none';
+    _mostrarFluxoKM(APP.veiculo);
+  }
+}
+function _carregarFormVeiculo() {
+  if (APP.veiculo !== undefined) { _renderizarFormVeiculo(APP.veiculo); return; }
+  showLoading('Carregando veiculo...');
+  gsCall('getVeiculoDoTecnico', [APP.tecnico.id]).then(v => {
+    hideLoading(); APP.veiculo = v; _renderizarFormVeiculo(v);
+  }).catch(() => { hideLoading(); toast('Erro ao carregar dados do veiculo', true); });
+}
+function _renderizarFormVeiculo(v) {
+  const badgeEl = document.getElementById('veiculo-status-badge');
+  const msgEl = document.getElementById('veiculo-status-msg');
+  const avisoEl = document.getElementById('veiculo-aviso-aprovado');
+  const avisoTxt = document.getElementById('veiculo-aviso-texto');
+  if (!v) {
+    badgeEl.innerHTML = '<span class="status-badge badge-neutro">Nenhum veiculo cadastrado</span>';
+    msgEl.style.display = 'none'; avisoEl.style.display = 'none';
+    document.getElementById('veiculo-placa').value = '';
+    document.getElementById('veiculo-modelo').value = '';
+    document.getElementById('veiculo-tipo').value = 'Carro proprio';
+    return;
+  }
+  document.getElementById('veiculo-tipo').value = v.tipoVeiculo || 'Carro proprio';
+  document.getElementById('veiculo-placa').value = v.placa || '';
+  document.getElementById('veiculo-modelo').value = v.modelo || '';
+  if (v.statusAprovacao === 'Aprovado' && !v.alteracaoPendente) {
+    badgeEl.innerHTML = '<span class="status-badge badge-aprovado">Aprovado</span>';
+    avisoEl.style.display = 'flex';
+    avisoTxt.textContent = 'Seu veiculo ' + (v.placa || '') + ' esta aprovado. Qualquer alteracao precisara de nova aprovacao do gestor.';
+    msgEl.style.display = 'none';
+  } else if (v.statusAprovacao === 'Rejeitado') {
+    badgeEl.innerHTML = '<span class="status-badge badge-rejeitado">Rejeitado</span>';
+    msgEl.style.display = 'block';
+    msgEl.textContent = v.motivoRejeicao ? 'Motivo: ' + v.motivoRejeicao : 'Cadastro rejeitado pelo gestor. Corrija os dados e reenvie.';
+    avisoEl.style.display = 'none';
+  } else {
+    badgeEl.innerHTML = '<span class="status-badge badge-pendente">Aguardando aprovacao do gestor</span>';
+    msgEl.style.display = 'block';
+    msgEl.textContent = 'Seu veiculo esta em analise. Voce pode atualizar os dados e reenviar enquanto aguarda.';
+    avisoEl.style.display = 'none';
+  }
+}
+function salvarVeiculo() {
+  const tipo = document.getElementById('veiculo-tipo').value;
+  const placa = document.getElementById('veiculo-placa').value.trim().toUpperCase();
+  const modelo = document.getElementById('veiculo-modelo').value.trim();
+  if (!placa) { toast('Informe a placa do veiculo', true); return; }
+  if (!modelo) { toast('Informe o modelo do veiculo', true); return; }
+  showLoading('Salvando veiculo...');
+  gsCall('cadastrarOuEditarVeiculo', [APP.tecnico.id, APP.tecnico.nome, tipo, placa, modelo], { enfileiravelSeOffline: true })
+    .then(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      APP.veiculo = { tipoVeiculo: tipo, placa, modelo, statusAprovacao: 'Pendente', alteracaoPendente: false, motivoRejeicao: '' };
+      toast(res.status || 'Enviado para aprovacao!');
+      _renderizarFormVeiculo(APP.veiculo);
+    }).catch(() => { hideLoading(); toast('Erro ao salvar veiculo', true); });
+}
+
+// ================================================================
+// ENCERRAR
+// ================================================================
+function irParaEncerrar() {
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  document.getElementById('enc-id').textContent = os.id + ' - ' + os.cliente;
+  document.getElementById('enc-qtd').value = os.qtdRealizada || '';
+  document.getElementById('enc-pct').value = os.pctAcumulado || 0;
+  document.getElementById('enc-pct-num').textContent = os.pctAcumulado || 0;
+  document.getElementById('enc-obs').value = '';
+  document.getElementById('enc-materiais').value = '';
+  document.getElementById('enc-proximo').value = '';
+  document.getElementById('enc-nc').checked = false;
+  const nc = document.getElementById('enc-nc');
+  const track = document.getElementById('enc-nc-track');
+  const thumb = document.getElementById('enc-nc-thumb');
+  nc.addEventListener('change', () => {
+    track.style.background = nc.checked ? 'var(--green)' : 'var(--bg3)';
+    thumb.style.background = nc.checked ? '#fff' : 'var(--gray)';
+    thumb.style.transform = nc.checked ? 'translateX(24px)' : '';
+  });
+  showScreen('scr-encerrar');
+}
+function calcularPct() {
+  const qtd = parseInt(document.getElementById('enc-qtd').value) || 0;
+  const os = APP.osAtiva || APP.osPausada;
+  if (os && os.metaDia > 0) {
+    const pct = Math.min(100, Math.round((qtd / os.metaDia) * 100));
+    document.getElementById('enc-pct').value = pct;
+    document.getElementById('enc-pct-num').textContent = pct;
+  }
+}
+function confirmarEncerramento() {
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  const dadosEnc = {
+    qtdRealizada: parseInt(document.getElementById('enc-qtd').value) || 0,
+    pctAcumulado: parseInt(document.getElementById('enc-pct').value) || 0,
+    observacoes: document.getElementById('enc-obs').value.trim(),
+    materiais: document.getElementById('enc-materiais').value.trim(),
+    ocorrencias: '', proximoPasso: document.getElementById('enc-proximo').value.trim(),
+    fotosURL: '', naoConformidade: document.getElementById('enc-nc').checked
+  };
+  showLoading('Encerrando OS...');
+  pararCronometro(); limparTimerLS();
+  gsCall('encerrarOS', [os.id, APP.tecnico.id, APP.tecnico.nome, dadosEnc], { enfileiravelSeOffline: true })
+    .then(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      toast(res.offline ? 'OS encerrada (offline)' : 'OS encerrada! ' + res.horasFinais + ' produtivos');
+      APP.osAtiva = null; APP.osPausada = null;
+      carregarHome();
+    }).catch(() => { hideLoading(); toast('Erro ao encerrar', true); });
+}
+
+// ================================================================
+// RESUMO
+// ================================================================
+function irParaResumo() {
+  showScreen('scr-resumo');
+  document.getElementById('resumo-sub').textContent = new Date().toLocaleDateString('pt-BR', {weekday:'long',day:'2-digit',month:'long'});
+  showLoading('Carregando resumo...');
+  gsCall('getDiariaTecnico', [APP.tecnico.id]).then(renderResumo).catch(() => { hideLoading(); toast('Erro ao carregar resumo', true); });
+}
+function renderResumo(diaria) {
+  hideLoading();
+  if (!diaria) {
+    document.getElementById('resumo-vazio').style.display = 'block';
+    document.getElementById('resumo-dados').style.display = 'none';
+    document.getElementById('resumo-km-block').style.display = 'none';
+    return;
+  }
+  document.getElementById('resumo-vazio').style.display = 'none';
+  document.getElementById('resumo-dados').style.display = 'block';
+  document.getElementById('res-horas').textContent = diaria.horasProdFormatadas || '0h00';
+  document.getElementById('res-os').textContent = diaria.qtdOS || 0;
+  document.getElementById('res-pauses').textContent = diaria.qtdInterrupcoes || 0;
+  document.getElementById('res-entrada').textContent = diaria.horaEntrada || '--:--';
+  document.getElementById('res-saida').textContent = diaria.horaSaida || '--:--';
+  document.getElementById('res-clientes').textContent = diaria.clientes || 'Nenhum cliente registrado';
+  document.getElementById('res-status').textContent = diaria.statusDia || 'Em campo';
+  const kmBlock = document.getElementById('resumo-km-block');
+  const usaVeiculo = diaria.usaVeiculo === true || diaria.usaVeiculo === 'TRUE';
+  const kmFinalVazio = !diaria.kmFinal || diaria.kmFinal === '' || diaria.kmFinal === 0;
+  kmBlock.style.display = (usaVeiculo && kmFinalVazio) ? 'block' : 'none';
+}
+
+// ================================================================
+// STATUS OFFLINE/ONLINE
+// ================================================================
+window.addEventListener('online', () => {
+  document.getElementById('offline-banner').classList.remove('show');
+  processarFilaOffline();
+});
+window.addEventListener('offline', () => {
+  document.getElementById('offline-banner').classList.add('show');
+});
+
+// ================================================================
+// SERVICE WORKER
+// ================================================================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW falhou:', err));
+  });
+}
+
+// ================================================================
+// INICIALIZACAO
+// ================================================================
+window.addEventListener('DOMContentLoaded', () => {
+  if (!navigator.onLine) document.getElementById('offline-banner').classList.add('show');
+  processarFilaOffline();
+  const tecLS = localStorage.getItem('eletrium_tecnico');
+  if (tecLS) {
+    try {
+      APP.tecnico = JSON.parse(tecLS);
+      gsCall('getDiariaHoje', [APP.tecnico.id]).then(diaria => {
+        if (!diaria || !diaria.existe) irParaInicioDia();
+        else { APP.usaVeiculoHoje = diaria.usaVeiculo; APP.kmInicial = diaria.kmInicial; carregarHome(); }
+      }).catch(() => carregarHome());
+      return;
+    } catch(e) {}
+  }
+  carregarTecnicos();
+});
+</script>
+</body>
+</html>
