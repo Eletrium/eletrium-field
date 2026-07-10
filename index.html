@@ -746,7 +746,10 @@ function carregarTecnicos() {
 function renderTecnicos(lista) {
   hideLoading();
   const container = document.getElementById('login-tecnicos');
-  if (!lista || !lista.length) { document.getElementById('login-erro').style.display = 'flex'; return; }
+  if (!lista || !lista.length) {
+    errTecnicos(new Error('Lista de tecnicos veio vazia (resposta OK, mas sem dados)'));
+    return;
+  }
   container.innerHTML = '';
   lista.forEach(tec => {
     const iniciais = tec.nome.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
@@ -759,7 +762,15 @@ function renderTecnicos(lista) {
     container.appendChild(el);
   });
 }
-function errTecnicos() { hideLoading(); document.getElementById('login-erro').style.display = 'flex'; }
+function errTecnicos(err) {
+  hideLoading();
+  const el = document.getElementById('login-erro');
+  el.style.display = 'flex';
+  const msgDetalhe = (err && err.message) ? err.message : 'Erro desconhecido';
+  const infoExtra = 'URL da API: ' + API_URL;
+  el.innerHTML = '<div>Erro ao carregar tecnicos<br>' +
+    '<span style="font-size:11px;opacity:.85;word-break:break-all">Detalhe: ' + msgDetalhe + '<br>' + infoExtra + '</span></div>';
+}
 
 function entrarComoTecnico(tec) {
   APP.tecnico = tec;
