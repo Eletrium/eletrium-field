@@ -7,7 +7,7 @@
 // index.html via fila no IndexedDB (enfileirarChamada).
 // ============================================================
 
-const CACHE_NAME = 'eletrium-field-v2';
+const CACHE_NAME = 'eletrium-field-v3';
 const ARQUIVOS_PARA_CACHE = [
   './',
   './index.html',
