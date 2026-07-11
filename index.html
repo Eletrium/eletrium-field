@@ -533,9 +533,6 @@ async function processarFilaOffline() {
 // esse formato em vez de fetch() para falar com o Apps Script.
 let jsonpContador = 0;
 function gsCallReal(action, params) {
-  if (!navigator.onLine) {
-    return Promise.reject(new Error('Sem conexao'));
-  }
   return new Promise((resolve, reject) => {
     const nomeCallback = 'gsCallback_' + (jsonpContador++);
     const script = document.createElement('script');
@@ -566,7 +563,7 @@ function gsCallReal(action, params) {
       finalizado = true;
       limpar();
       reject(new Error('Tempo esgotado'));
-    }, 15000);
+    }, 6000);
 
     const url = API_URL +
       '?action=' + encodeURIComponent(action) +
@@ -799,9 +796,9 @@ function errTecnicos(err) {
   const el = document.getElementById('login-erro');
   el.style.display = 'flex';
   const msgDetalhe = (err && err.message) ? err.message : 'Erro desconhecido';
-  const infoExtra = 'URL da API: ' + API_URL;
   el.innerHTML = '<div>Erro ao carregar tecnicos<br>' +
-    '<span style="font-size:11px;opacity:.85;word-break:break-all">Detalhe: ' + msgDetalhe + '<br>' + infoExtra + '</span></div>';
+    '<span style="font-size:11px;opacity:.85;word-break:break-all">Detalhe: ' + msgDetalhe + '</span><br>' +
+    '<button class="btn btn-gray btn-sm" style="margin-top:10px" onclick="carregarTecnicos()">Tentar novamente</button></div>';
 }
 
 function entrarComoTecnico(tec) {
@@ -871,7 +868,8 @@ function carregarHome() {
     const el = document.getElementById('home-os-lista');
     el.innerHTML = '<div class="card" style="text-align:center;padding:32px">' +
       '<div style="color:var(--yellow)">Sem conexao no momento</div>' +
-      '<div style="color:var(--gray);font-size:13px;margin-top:6px">As OS aparecem assim que o sinal voltar</div></div>';
+      '<div style="color:var(--gray);font-size:13px;margin-top:6px;margin-bottom:14px">As OS aparecem assim que o sinal voltar</div>' +
+      '<button class="btn btn-gray btn-sm" style="margin-bottom:0" onclick="carregarHome()">Tentar novamente</button></div>';
   });
 }
 
