@@ -398,6 +398,17 @@ input[type=range]{width:100%;height:44px;accent-color:var(--green);cursor:pointe
       </div>
       <button class="btn btn-green" onclick="concluirChecklist()">VOLTAR PARA OS</button>
     </div>
+    <div id="chk-v2-erro-versao" style="display:none">
+      <div class="card" style="border-color:var(--red);padding:16px">
+        <div style="color:var(--red);font-weight:700;margin-bottom:6px">Aplicativo desatualizado</div>
+        <div style="color:var(--text2);font-size:14px;line-height:1.4" id="chk-v2-erro-msg"></div>
+      </div>
+    </div>
+    <div id="chk-v2-block" style="display:none">
+      <div class="hdr-sub" id="chk-v2-fase-titulo" style="margin-bottom:12px;color:var(--text2);font-weight:600"></div>
+      <div id="chk-v2-perguntas"></div>
+      <button class="btn btn-green" id="chk-v2-btn-avancar" style="margin-top:8px" onclick="CHKV2.tentarAvancarFase()">PRÓXIMA FASE</button>
+    </div>
   </div>
 </div>
 
@@ -436,6 +447,31 @@ input[type=range]{width:100%;height:44px;accent-color:var(--green);cursor:pointe
     </div>
     <div class="divider"></div>
     <button class="btn btn-gray btn-sm" onclick="logOut()">Trocar tecnico</button>
+  </div>
+</div>
+
+<!-- TELA KM: KM DO ODOMETRO (por-OS, aditiva) -->
+<div id="scr-iniciar-km" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-home')">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">KM do Odometro</div><div class="hdr-sub" id="iniciar-km-cliente"></div></div>
+  </div>
+  <div class="content">
+    <div class="form-group">
+      <label class="form-label">KM atual do odometro</label>
+      <input class="form-input" type="number" id="iniciar-km-input" placeholder="Ex: 12480" inputmode="numeric" min="0" step="1">
+    </div>
+    <div id="iniciar-km-desvio-bloco" style="display:none">
+      <div class="alert alert-warn" id="iniciar-km-desvio-msg" style="margin-bottom:12px"></div>
+      <div class="form-group">
+        <label class="form-label">Justificativa</label>
+        <textarea class="form-textarea" id="iniciar-km-justificativa" placeholder="Explique o desvio de rota..."></textarea>
+      </div>
+      <div class="alert alert-warn" style="margin-bottom:12px">
+        Foto do odometro tambem obrigatoria — captura ainda nao disponivel nesta versao do app.
+      </div>
+    </div>
+    <button class="btn btn-green" onclick="confirmarKMInicial()">CONFIRMAR E INICIAR OS</button>
   </div>
 </div>
 
@@ -863,6 +899,7 @@ function carregarHome() {
   document.getElementById('home-titulo').textContent = nome;
   document.getElementById('home-sub').textContent = hoje;
   showScreen('scr-home');
+  gsCall('getOSsPendentesKMFinal', [APP.tecnico.id]).then(renderBannerKMPendente).catch(() => {});
   gsCall('getOsDoTecnico', [APP.tecnico.id]).then(renderHome).catch(() => {
     hideLoading();
     const el = document.getElementById('home-os-lista');
@@ -918,6 +955,62 @@ function renderHome(lista) {
   });
 }
 
+// KM por-OS: banner de "falta preencher KM final" (OS Concluida, com
+// KM_Inicial_OS preenchido, KM_Final_OS vazio, ate 3 dias atras).
+function renderBannerKMPendente(pendentes) {
+  const existente = document.getElementById('banner-km-pendente');
+  if (existente) existente.remove();
+  if (!pendentes || !pendentes.length) return;
+  const el = document.createElement('div');
+  el.id = 'banner-km-pendente';
+  el.className = 'alert alert-warn';
+  el.style.cssText = 'margin-bottom:12px;cursor:pointer';
+  el.innerHTML = '<span>!</span><div>Falta o KM final de ' + pendentes.length + ' OS. Toque para preencher.</div>';
+  el.onclick = () => abrirPreenchimentoKMFinal(pendentes);
+  const lista = document.getElementById('home-os-lista');
+  lista.parentNode.insertBefore(el, lista);
+}
+
+function abrirPreenchimentoKMFinal(pendentes) {
+  APP.kmPendenteFila = pendentes.slice();
+  _proximoKMPendente();
+}
+
+function _proximoKMPendente() {
+  if (!APP.kmPendenteFila || !APP.kmPendenteFila.length) { carregarHome(); return; }
+  const item = APP.kmPendenteFila[0];
+  document.getElementById('iniciar-km-cliente').textContent = item.cliente + ' - ' + item.osId + ' (encerrada ' + item.dataEncerramento + ')';
+  document.getElementById('iniciar-km-input').value = '';
+  document.getElementById('iniciar-km-justificativa').value = '';
+  document.getElementById('iniciar-km-desvio-bloco').style.display = 'none';
+  APP.osKMPendenteAtual = item;
+  showScreen('scr-iniciar-km');
+  // Reaproveita a mesma tela — troca o botao para a acao de KM final pendente.
+  document.querySelector('#scr-iniciar-km .btn-green').setAttribute('onclick', 'confirmarKMFinalPendente()');
+}
+
+function confirmarKMFinalPendente() {
+  const km = document.getElementById('iniciar-km-input').value.trim();
+  if (!km) { toast('Informe o KM do odometro', true); return; }
+  const justificativa = document.getElementById('iniciar-km-justificativa').value.trim();
+  showLoading('Registrando KM final...');
+  gsCall('registrarKMFinalPendente', [APP.osKMPendenteAtual.osId, APP.tecnico.id, km, justificativa, ''], { enfileiravelSeOffline: true })
+    .then(res => {
+      hideLoading();
+      if (res.exigeJustificativa) {
+        document.getElementById('iniciar-km-desvio-bloco').style.display = 'block';
+        document.getElementById('iniciar-km-desvio-msg').textContent = res.mensagem;
+        return;
+      }
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      APP.kmPendenteFila.shift();
+      toast('KM registrado');
+      // Reverte o botao para a acao normal de iniciar OS antes de sair da tela/repetir.
+      document.querySelector('#scr-iniciar-km .btn-green').setAttribute('onclick', 'confirmarKMInicial()');
+      _proximoKMPendente();
+    }).catch(() => { hideLoading(); toast('Erro ao registrar KM', true); });
+}
+
 function abrirOS(os) {
   if (os.emPausa) { APP.osPausada = os; irParaPausada(); return; }
   if (os.statusAtual === 'Em andamento' && !os.emPausa) { APP.osAtiva = os; irParaOsAtiva(); return; }
@@ -925,15 +1018,60 @@ function abrirOS(os) {
   else toast('Encerre ou pause a OS ativa primeiro', true);
 }
 
+// KM por-OS (Opção 2, 06/08): se o técnico usa veículo hoje, a OS
+// nova passa pela tela de KM antes de iniciar. Sem veículo, segue o
+// fluxo antigo (iniciarOSComGeo, sem KM).
 function confirmarIniciarOS(os) {
   if (!confirm('Iniciar OS ' + os.id + ' para ' + os.cliente + '?')) return;
+  APP.osParaIniciar = os;
+  if (!APP.usaVeiculoHoje) {
+    _iniciarOSDeVerdade(os, null, null);
+    return;
+  }
+  document.getElementById('iniciar-km-cliente').textContent = os.cliente + ' - ' + os.id;
+  document.getElementById('iniciar-km-input').value = '';
+  document.getElementById('iniciar-km-justificativa').value = '';
+  document.getElementById('iniciar-km-desvio-bloco').style.display = 'none';
+  showScreen('scr-iniciar-km');
+  setTimeout(() => document.getElementById('iniciar-km-input').focus(), 100);
+}
+
+function confirmarKMInicial() {
+  const km = document.getElementById('iniciar-km-input').value.trim();
+  if (!km) { toast('Informe o KM do odometro', true); return; }
+  const os = APP.osParaIniciar;
+  const veiculoId = APP.veiculo ? APP.veiculo.placa : '';
+  const justificativa = document.getElementById('iniciar-km-justificativa').value.trim();
+  _iniciarOSDeVerdade(os, km, veiculoId, justificativa);
+}
+
+// Helper interno usado pelos dois fluxos (com e sem veiculo hoje).
+// CORREÇÃO (05/08, ao aplicar): o pacote original chamava sempre
+// iniciarOSComKM, mesmo sem veiculo (km=null) — mas
+// validarESalvarKMInicial faz parseFloat(null)||0 e grava
+// KM_Inicial_OS=0 incondicionalmente, o que poluiria toda OS de quem
+// nao usa veiculo E faria essa OS aparecer no banner de "falta KM
+// final" (getOSsPendentesKMFinal só pula '' /null, não 0). Sem km,
+// usa o caminho antigo (iniciarOSComGeo) que nunca toca KM_Inicial_OS
+// — é o que o comentario "fluxo antigo, sem KM" já prometia.
+function _iniciarOSDeVerdade(os, km, veiculoId, justificativa) {
   showLoading('Capturando localizacao...');
   capturarGeolocalizacao((lat, lng) => {
     showLoading('Iniciando OS...');
-    gsCall('iniciarOSComGeo', [os.id, APP.tecnico.id, APP.tecnico.nome, '', lat, lng], { enfileiravelSeOffline: true })
+    const semKm = km === null || km === undefined || km === '';
+    const chamada = semKm
+      ? gsCall('iniciarOSComGeo', [os.id, APP.tecnico.id, APP.tecnico.nome, '', lat, lng], { enfileiravelSeOffline: true })
+      : gsCall('iniciarOSComKM', [os.id, APP.tecnico.id, APP.tecnico.nome, '', lat, lng, km, veiculoId, justificativa, ''], { enfileiravelSeOffline: true });
+    chamada
       .then(res => {
         hideLoading();
         if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+        if (res.exigeJustificativa) {
+          document.getElementById('iniciar-km-desvio-bloco').style.display = 'block';
+          document.getElementById('iniciar-km-desvio-msg').textContent = res.mensagem;
+          toast('Diferenca de KM detectada — justifique abaixo', true);
+          return;
+        }
         APP.osAtiva = os; os.horaInicio = res.hora || '--:--'; os.statusAtual = 'Em andamento';
         toast(res.offline ? 'OS iniciada (offline)' : 'OS iniciada as ' + res.hora + (lat ? ' GPS ok' : ''));
         carregarHome();
@@ -1075,7 +1213,204 @@ function confirmarEmergencia() {
 }
 
 // ================================================================
-// CHECKLIST NR-10
+// CHECKLIST VERSIONADO (Fat-Client, 06/08/2026) — dados fixos no
+// bundle, sem round-trip por pergunta. Ver Checklist_Versionado.js
+// (pwa/) para a origem/rastreabilidade completa deste bloco.
+// ================================================================
+// REDESENHO 10/08 — motor trocado de "lista plana por fase" para
+// TREE-WALK CONDICIONAL, espelhando getProximaPergunta() real (Código.js
+// linha ~725): próxima pergunta = primeiro FILHO ativo da pergunta atual
+// cujo condicaoExibicao bate com a resposta dada (ou sem condição),
+// ordenado por ordem. Sem filho batendo = fim do checklist.
+//
+// ⚠️ pai/condicaoExibicao/tipoResposta/fotoObrigatoria/ordem abaixo SÃO
+// RECONSTRUÇÃO POR INFERÊNCIA (nome dos IDs + agrupamento original), NÃO
+// dado real — ver Checklist_Versionado.js (pwa/) para o aviso completo e
+// a árvore comentada por ramo. PUBLICAÇÃO PAUSADA até confirmar contra
+// Get-PnPListItem de Perguntas_Checklist/Opcoes_Resposta.
+const CHECKLIST_VERSION_ATUAL = 'v1.0';
+const POOL_PERGUNTAS = {
+  "N3_TIPO": { texto: "Tipo de Serviço", tipoResposta: "Unica", fotoObrigatoria: false, pai: null, condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Reaperto de Conexoes", nc: false }, { label: "Limpeza/Adequacao de Painel", nc: false },
+    { label: "Diagnostico de Falha", nc: false }, { label: "Instalacao de Componente", nc: false },
+    { label: "Medicao Eletrica", nc: false }, { label: "Adequacao de Seguranca NR-10", nc: false } ] },
+  "N4_REAP_ANOM": { texto: "Anomalia (Reaperto)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N3_TIPO", condicaoExibicao: "Reaperto de Conexoes", ordem: 1, opcoes: [
+    { label: "Oxidacao", nc: false }, { label: "Frouxidao", nc: false },
+    { label: "Sobreaquecimento visivel", nc: false }, { label: "Rompimento parcial de fio", nc: false } ] },
+  "N4_REAP_TORQ": { texto: "Torque (Reaperto)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_REAP_ANOM", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Sim", nc: false }, { label: "Nao-ajustado durante o servico", nc: false } ] },
+  "N4_REAP_ACAO": { texto: "Ação (Reaperto)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_REAP_TORQ", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Reaperto realizado", nc: false }, { label: "Substituicao de terminal", nc: false },
+    { label: "Substituicao de cabo", nc: false } ] },
+  "N4_REAP_EST": { texto: "Estado do Reaperto", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_REAP_ACAO", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Conforme-preventivo", nc: false }, { label: "Nao conforme-frouxidao/oxidacao severa", nc: true } ] },
+  "N4_LIMP_TIPO": { texto: "Tipo de Limpeza", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N3_TIPO", condicaoExibicao: "Limpeza/Adequacao de Painel", ordem: 2, opcoes: [
+    { label: "Limpeza a seco", nc: false }, { label: "Limpeza com produto especifico", nc: false },
+    { label: "Aspiracao de residuos", nc: false } ] },
+  "N4_LIMP_ADEQ": { texto: "Adequação (Limpeza)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_LIMP_TIPO", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Identificacao de circuitos", nc: false }, { label: "Sinalizacao de seguranca", nc: false },
+    { label: "Vedacao de aberturas", nc: false }, { label: "Organizacao de cabos", nc: false },
+    { label: "Nenhuma adequacao adicional", nc: false } ] },
+  "N4_LIMP_EST": { texto: "Estado da Limpeza", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_LIMP_ADEQ", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Conforme", nc: false }, { label: "Nao conforme-poeira", nc: true },
+    { label: "Nao conforme-umidade/corrosao", nc: true }, { label: "Nao conforme-insetos/roedores", nc: true } ] },
+  "N4_DIAG_SINT": { texto: "Sintoma (Diagnóstico)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N3_TIPO", condicaoExibicao: "Diagnostico de Falha", ordem: 3, opcoes: [
+    { label: "Painel nao energiza", nc: false }, { label: "Disjuntor desarma", nc: false },
+    { label: "Ruido anormal", nc: false }, { label: "Odor de queimado", nc: false },
+    { label: "Faisca/centelhamento", nc: false }, { label: "Outro", nc: false } ] },
+  "N4_DIAG_CAUSA": { texto: "Causa (Diagnóstico)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_DIAG_SINT", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Curto-circuito", nc: false }, { label: "Sobrecarga", nc: false },
+    { label: "Falha de isolamento", nc: false }, { label: "Componente danificado", nc: false },
+    { label: "Falha de conexao", nc: false }, { label: "Nao identificada", nc: false } ] },
+  "N4_DIAG_COMP": { texto: "Componente (Diagnóstico)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_DIAG_CAUSA", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Disjuntor", nc: false }, { label: "Contator", nc: false }, { label: "Rele", nc: false },
+    { label: "Transformador", nc: false }, { label: "Barramento", nc: false },
+    { label: "Cabo", nc: false }, { label: "Fonte", nc: false } ] },
+  "N4_DIAG_ACAO": { texto: "Ação (Diagnóstico)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_DIAG_COMP", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Reparo imediato", nc: false }, { label: "Substituicao de componente", nc: false },
+    { label: "Isolamento da area", nc: false }, { label: "Intervencao programada", nc: false } ] },
+  "N4_INST_COMP": { texto: "Componente (Instalação)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N3_TIPO", condicaoExibicao: "Instalacao de Componente", ordem: 4, opcoes: [
+    { label: "Disjuntor", nc: false }, { label: "DPS", nc: false }, { label: "Contator", nc: false },
+    { label: "Rele", nc: false }, { label: "Fusivel", nc: false }, { label: "Barramento", nc: false },
+    { label: "Botoeira", nc: false }, { label: "Sinalizador", nc: false } ] },
+  "N4_INST_TESTE": { texto: "Teste de Instalação", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_INST_COMP", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Aprovado", nc: false }, { label: "Reprovado-nova tentativa", nc: true },
+    { label: "Reprovado-escalado p/ engenharia", nc: true } ] },
+  "N4_MED_TIPO": { texto: "Tipo de Medição", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N3_TIPO", condicaoExibicao: "Medicao Eletrica", ordem: 5, opcoes: [
+    { label: "Tensao", nc: false }, { label: "Corrente", nc: false },
+    { label: "Resistencia de isolamento", nc: false }, { label: "Resistencia de aterramento", nc: false },
+    { label: "Continuidade", nc: false } ] },
+  "N4_MED_RES": { texto: "Resultado da Medição", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_MED_TIPO", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Dentro da norma", nc: false }, { label: "Fora da norma-acao corretiva", nc: true },
+    { label: "Fora da norma-area isolada", nc: true } ] },
+  "N4_SEG_ITEM": { texto: "Item de Segurança", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N3_TIPO", condicaoExibicao: "Adequacao de Seguranca NR-10", ordem: 6, opcoes: [
+    { label: "Sinalizacao de risco eletrico", nc: false }, { label: "Bloqueio e etiquetagem(LOTO)", nc: false },
+    { label: "Aterramento temporario", nc: false }, { label: "Distancia de seguranca", nc: false },
+    { label: "EPI coletivo disponivel", nc: false } ] },
+  "N4_SEG_CONF": { texto: "Conformidade (Segurança)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_SEG_ITEM", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Conforme", nc: false }, { label: "Nao conforme-acao corretiva aplicada", nc: true },
+    { label: "Nao conforme-intervencao programada", nc: true } ] }
+};
+const VERSIONS = { "v1.0": { raizes: ["N3_TIPO"] } };
+
+// Motor novo (fat-client, tree-walk). Se a OS não trouxer checklist_version
+// reconhecida, irParaChecklist() cai no fluxo antigo (getProximaPergunta ao
+// vivo) em vez de travar a tela: republicar o backend antes do frontend
+// evita isso, mas se acontecer fora de ordem o checklist não para de
+// funcionar pros técnicos.
+const CHKV2 = {
+  perguntaAtualId: null, osId: null, idSharePointOS: null, respostas: [], temNC: false,
+
+  inicializar(os) {
+    this.osId = os.id; this.idSharePointOS = os.idSharePoint || '';
+    this.perguntaAtualId = null; this.respostas = []; this.temNC = false;
+    const versao = VERSIONS[os.checklist_version];
+    if (!versao || !versao.raizes || !versao.raizes.length) throw new Error('Versao ' + os.checklist_version + ' sem raizes definidas.');
+    this._raizes = versao.raizes;
+    this._avancarPara(this._proximaPergunta(null, null));
+  },
+
+  // Espelha getProximaPergunta(): filhos ativos de perguntaAtualId cuja
+  // condicaoExibicao bate com respostaDada (ou sem condicao), por ordem.
+  _proximaPergunta(perguntaAtualId, respostaDada) {
+    let candidatas;
+    if (!perguntaAtualId) {
+      candidatas = this._raizes.slice();
+    } else {
+      candidatas = Object.keys(POOL_PERGUNTAS).filter(id => {
+        const p = POOL_PERGUNTAS[id];
+        if (p.pai !== perguntaAtualId) return false;
+        if (p.condicaoExibicao != null && p.condicaoExibicao !== respostaDada) return false;
+        return true;
+      });
+    }
+    if (!candidatas.length) return null;
+    candidatas.sort((a, b) => (POOL_PERGUNTAS[a].ordem || 0) - (POOL_PERGUNTAS[b].ordem || 0));
+    const id = candidatas[0];
+    if (!POOL_PERGUNTAS[id]) throw new Error('Pergunta ' + id + ' nao encontrada no POOL.');
+    return id;
+  },
+
+  _avancarPara(perguntaId) {
+    if (!perguntaId) { this.finalizar(); return; }
+    this.perguntaAtualId = perguntaId;
+    this.renderizarPergunta(perguntaId);
+  },
+
+  renderizarPergunta(perguntaId) {
+    const p = POOL_PERGUNTAS[perguntaId];
+    document.getElementById('chk-progresso').textContent = 'Pergunta ' + (this.respostas.length + 1);
+    document.getElementById('chk-v2-fase-titulo').textContent = 'Pergunta ' + (this.respostas.length + 1);
+    document.getElementById('chk-v2-btn-avancar').textContent = 'CONFIRMAR';
+    const opcoesHtml = p.opcoes.map((op, i) =>
+      '<label style="display:flex;align-items:center;gap:12px;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;cursor:pointer">' +
+      '<input type="radio" name="chkv2_' + perguntaId + '" value="' + i + '" data-nc="' + (op.nc ? '1' : '0') + '" ' +
+        'onchange="CHKV2.onResponder(\'' + perguntaId + '\')" style="width:20px;height:20px;accent-color:var(--green)">' +
+      '<span style="font-size:15px;color:var(--text)">' + op.label + '</span></label>'
+    ).join('');
+    document.getElementById('chk-v2-perguntas').innerHTML =
+      '<div class="card" style="margin-bottom:14px" id="chk-v2-card-' + perguntaId + '">' +
+        '<div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:10px">' + p.texto + '</div>' +
+        opcoesHtml +
+        '<div id="chk-v2-nc-' + perguntaId + '" style="display:none;margin-top:6px">' +
+          '<div class="alert alert-warn" style="margin-bottom:8px">Nao conformidade detectada nesta resposta.</div>' +
+          '<textarea class="form-textarea" id="chk-v2-just-' + perguntaId + '" placeholder="Justificativa (obrigatoria)"></textarea>' +
+          '<div class="alert alert-warn" style="margin-top:8px">Foto do item tambem obrigatoria — captura ainda nao disponivel nesta versao do app. Enquanto isso, esta pergunta nao pode ser confirmada como NC.</div>' +
+        '</div></div>';
+    document.getElementById('chk-v2-erro-versao').style.display = 'none';
+    document.getElementById('chk-v2-block').style.display = 'block';
+    document.getElementById('chk-pergunta-block').style.display = 'none';
+    document.getElementById('chk-resumo-block').style.display = 'none';
+    document.getElementById('chk-loading').style.display = 'none';
+  },
+
+  onResponder(perguntaId) {
+    const marcado = document.querySelector('input[name="chkv2_' + perguntaId + '"]:checked');
+    const nc = marcado && marcado.dataset.nc === '1';
+    document.getElementById('chk-v2-nc-' + perguntaId).style.display = nc ? 'block' : 'none';
+  },
+
+  // Chamado pelo botão "CONFIRMAR" (mantém o nome tentarAvancarFase por
+  // compatibilidade com o onclick já gravado na tela — só troca o corpo).
+  tentarAvancarFase() {
+    const p = POOL_PERGUNTAS[this.perguntaAtualId];
+    const marcado = document.querySelector('input[name="chkv2_' + this.perguntaAtualId + '"]:checked');
+    if (!marcado) { toast('Selecione uma opcao', true); return; }
+    const opcao = p.opcoes[Number(marcado.value)];
+    if (opcao.nc) {
+      // Foto nunca existe no app hoje — NC fica permanentemente bloqueada
+      // ate a captura de foto ser construida (limitacao conhecida, mesmo
+      // tratamento do KM por-OS).
+      toast('NC em "' + p.texto + '" exige foto do item, que este app ainda nao captura — nao e possivel avancar', true);
+      return;
+    }
+    this.respostas.push({ perguntaId: this.perguntaAtualId, texto: p.texto, resposta: opcao.label, nc: opcao.nc });
+    this._avancarPara(this._proximaPergunta(this.perguntaAtualId, opcao.label));
+  },
+
+  finalizar() {
+    showLoading('Salvando checklist...');
+    const chamadas = this.respostas.map(r =>
+      gsCall('salvarResposta', [this.osId, this.idSharePointOS, r.perguntaId, r.texto, r.resposta, '', APP.tecnico.nome, r.nc], { enfileiravelSeOffline: true })
+    );
+    Promise.all(chamadas).then(() => {
+      hideLoading();
+      CHK.totalRespostas = this.respostas.length;
+      CHK.temNC = this.respostas.some(r => r.nc);
+      document.getElementById('chk-v2-block').style.display = 'none';
+      document.getElementById('chk-resumo-block').style.display = 'block';
+      document.getElementById('chk-resumo-qtd').textContent = CHK.totalRespostas + ' pergunta(s) respondida(s)';
+      document.getElementById('chk-nc-aviso').style.display = CHK.temNC ? 'block' : 'none';
+      document.getElementById('chk-progresso').textContent = 'Concluido';
+    }).catch(() => { hideLoading(); toast('Erro ao salvar checklist', true); });
+  }
+};
+
+// ================================================================
+// CHECKLIST NR-10 (fluxo antigo, ao vivo — mantido como fallback:
+// roda quando a OS nao traz checklist_version reconhecida, seja
+// porque o backend ainda nao foi republicado com o motor novo, seja
+// por uma versao futura que este app ainda nao conhece)
 // ================================================================
 const CHK = {
   osId: null, idSharePointOS: null, disciplina: 'NR-10', perguntaAtualId: null,
@@ -1086,13 +1421,29 @@ const CHK = {
 function irParaChecklist() {
   const os = APP.osAtiva;
   if (!os) { toast('Nenhuma OS ativa', true); return; }
-  CHK.osId = os.id; CHK.idSharePointOS = os.idSharePoint || '';
-  CHK.disciplina = 'NR-10'; CHK.perguntaAtualId = null; CHK.totalRespostas = 0; CHK.temNC = false;
   document.getElementById('chk-loading').style.display = 'block';
   document.getElementById('chk-pergunta-block').style.display = 'none';
   document.getElementById('chk-resumo-block').style.display = 'none';
+  document.getElementById('chk-v2-block').style.display = 'none';
+  document.getElementById('chk-v2-erro-versao').style.display = 'none';
   document.getElementById('chk-progresso').textContent = 'Carregando...';
   showScreen('scr-checklist');
+
+  if (os.checklist_version && VERSIONS[os.checklist_version]) {
+    try {
+      CHKV2.inicializar(os);
+      return;
+    } catch (e) {
+      document.getElementById('chk-loading').style.display = 'none';
+      document.getElementById('chk-v2-erro-msg').textContent =
+        'Erro ao montar o checklist versionado (' + e.message + '). Peça para o time de TI conferir Checklist_Versionado.js.';
+      document.getElementById('chk-v2-erro-versao').style.display = 'block';
+      return;
+    }
+  }
+  // Sem checklist_version reconhecida: fluxo antigo, sem qualquer bloqueio de tela.
+  CHK.osId = os.id; CHK.idSharePointOS = os.idSharePoint || '';
+  CHK.disciplina = 'NR-10'; CHK.perguntaAtualId = null; CHK.totalRespostas = 0; CHK.temNC = false;
   carregarPergunta(null, null);
 }
 function voltarDaChecklist() { showScreen('scr-os-ativa'); }
