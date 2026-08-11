@@ -386,6 +386,25 @@ input[type=range]{width:100%;height:44px;accent-color:var(--green);cursor:pointe
         Foto obrigatoria para esta pergunta. Capture a evidencia antes de continuar.
       </div>
     </div>
+    <!-- NC (Nao Conformidade): bloqueio real de foto+texto -- mesmo padrao
+         do KM (scr-iniciar-km). Aparece no lugar das opcoes quando a
+         resposta escolhida aciona NC; so avanca com justificativa E foto,
+         e foto ainda nao existe no app (mesma limitacao ja aceita no KM). -->
+    <div id="chk-nc-block" style="display:none">
+      <div class="card" style="border-color:var(--red);margin-bottom:16px">
+        <div style="color:var(--red);font-weight:700;margin-bottom:6px">Nao conformidade — justificativa obrigatoria</div>
+        <div style="color:var(--text2);font-size:14px;line-height:1.4">Resposta selecionada: <b id="chk-nc-resposta"></b></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Justificativa</label>
+        <textarea class="form-textarea" id="chk-nc-justificativa" placeholder="Descreva a nao conformidade..."></textarea>
+      </div>
+      <div class="alert alert-warn" style="margin-bottom:12px">
+        Foto tambem obrigatoria — captura ainda nao disponivel nesta versao do app.
+      </div>
+      <button class="btn btn-green" onclick="confirmarRespostaNC()">CONFIRMAR</button>
+      <button class="btn btn-gray" style="margin-top:8px" onclick="cancelarRespostaNC()">VOLTAR</button>
+    </div>
     <div id="chk-resumo-block" style="display:none">
       <div class="card" style="border-color:var(--green);text-align:center;padding:24px;margin-bottom:16px">
         <div style="font-size:36px;margin-bottom:8px">OK</div>
@@ -1413,9 +1432,14 @@ const CHKV2 = {
 // por uma versao futura que este app ainda nao conhece)
 // ================================================================
 const CHK = {
-  osId: null, idSharePointOS: null, disciplina: 'NR-10', perguntaAtualId: null,
+  // disciplina: '' -- achado real (10/08): toda linha de Perguntas_Checklist
+  // tem Disciplina vazia hoje (confirmado via lerArvoreChecklist ao vivo);
+  // o valor antigo 'NR-10' nunca casava com nada e getProximaPergunta
+  // sempre devolvia null mesmo pra pergunta raiz. Nao introduzido por este
+  // fix -- achado ao testar o motor corrigido contra a planilha real.
+  osId: null, idSharePointOS: null, disciplina: '', perguntaAtualId: null,
   textoPergunta: '', tipoResposta: '', fotoObrigatoria: false, selecionados: [],
-  geraNC: false, totalRespostas: 0, temNC: false
+  geraNC: false, totalRespostas: 0, temNC: false, respostaNCPendente: null
 };
 
 function irParaChecklist() {
@@ -1449,7 +1473,10 @@ function irParaChecklist() {
 function voltarDaChecklist() { showScreen('scr-os-ativa'); }
 
 function carregarPergunta(perguntaAtualId, respostaDada) {
-  gsCall('getProximaPergunta', [CHK.disciplina, perguntaAtualId, respostaDada]).then(perg => {
+  // osId como 4o parametro: o motor usa Checklist_Respostas desta OS pra
+  // saber quais irmas (mesmo Pergunta_Pai) ja foram visitadas e voltar pra
+  // elas, em vez de so olhar filhos da ultima pergunta respondida.
+  gsCall('getProximaPergunta', [CHK.disciplina, perguntaAtualId, respostaDada, CHK.osId]).then(perg => {
     document.getElementById('chk-loading').style.display = 'none';
     if (!perg) {
       document.getElementById('chk-pergunta-block').style.display = 'none';
@@ -1516,11 +1543,21 @@ function renderizarOpcoes(opcoes) {
 }
 
 function responderPergunta(resposta, geraNC) {
+  // NC (nao conformidade) exige justificativa + foto antes de gravar --
+  // bloqueio real, nao so aviso visual. Mesmo padrao do KM
+  // (validarESalvarKMInicial): foto ainda nao existe no app, entao NC
+  // fica bloqueada ate a captura de foto ser implementada -- limitacao
+  // conhecida e ja aceita no fluxo de KM, replicada aqui de proposito.
+  if (geraNC) { abrirConfirmacaoNC(resposta); return; }
+  _gravarResposta(resposta, geraNC);
+}
+function _gravarResposta(resposta, geraNC) {
   CHK.totalRespostas++;
   if (geraNC) CHK.temNC = true;
   gsCall('salvarResposta', [CHK.osId, CHK.idSharePointOS, CHK.perguntaAtualId, CHK.textoPergunta, resposta, '', APP.tecnico.nome, geraNC], { enfileiravelSeOffline: true });
   document.getElementById('chk-loading').style.display = 'block';
   document.getElementById('chk-pergunta-block').style.display = 'none';
+  document.getElementById('chk-nc-block').style.display = 'none';
   carregarPergunta(CHK.perguntaAtualId, resposta);
 }
 function confirmarMultipla() {
@@ -1528,6 +1565,30 @@ function confirmarMultipla() {
   const resposta = CHK.selecionados.map(s => s.texto).join('; ');
   const geraNC = CHK.selecionados.some(s => s.nc);
   responderPergunta(resposta, geraNC);
+}
+
+// ─── NC: bloqueio real de foto+texto (mesmo padrao do KM) ───────────
+function abrirConfirmacaoNC(resposta) {
+  CHK.respostaNCPendente = resposta;
+  document.getElementById('chk-nc-resposta').textContent = resposta;
+  document.getElementById('chk-nc-justificativa').value = '';
+  document.getElementById('chk-pergunta-block').style.display = 'none';
+  document.getElementById('chk-nc-block').style.display = 'block';
+}
+function cancelarRespostaNC() {
+  CHK.respostaNCPendente = null;
+  document.getElementById('chk-nc-block').style.display = 'none';
+  document.getElementById('chk-pergunta-block').style.display = 'block';
+}
+function confirmarRespostaNC() {
+  const justificativa = document.getElementById('chk-nc-justificativa').value.trim();
+  const temFoto = false; // captura de foto nao existe no app ainda (mesma limitacao do KM)
+  if (!justificativa || !temFoto) {
+    toast('Justificativa e foto sao obrigatorias para nao conformidade — captura de foto ainda nao disponivel nesta versao do app', true);
+    return;
+  }
+  // Inalcancavel enquanto temFoto for sempre false, de proposito — ver comentario acima.
+  _gravarResposta(CHK.respostaNCPendente, true);
 }
 function concluirChecklist() {
   showScreen('scr-os-ativa');
