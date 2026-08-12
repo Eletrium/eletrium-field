@@ -412,10 +412,10 @@ const CAMPOS_ARQUIVO_PERMITIDOS = ['Laudo_URL', 'Assinatura_URL', 'KM_Foto_Desvi
 
 function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArquivo, operationId, dispositivoId) {
   if (CAMPOS_ARQUIVO_PERMITIDOS.indexOf(campo) < 0) {
-    return { sucesso: false, erro: 'Campo nao permitido: ' + campo };
+    return _recusa('Campo nao permitido: ' + campo);
   }
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return { sucesso: false, erro: posse.erro };
+  if (!posse.ok) return _recusa(posse.erro);
   // tipo_operacao pro Log_Central (lista fechada aprovada Geovane/Cowork
   // 2, 12/08): Assinatura_URL bate exato com ASSINATURA. Laudo_URL nao
   // tem categoria propria na lista aprovada -- aproximado pra UPLOAD_FOTO
@@ -426,10 +426,10 @@ function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArqui
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const osSheet = ss.getSheetByName('Ordens_Servico');
     const osRow = encontrarLinha(osSheet, osId, 0);
-    if (!osRow) return { sucesso: false, erro: 'OS nao encontrada: ' + osId };
+    if (!osRow) return _recusa('OS nao encontrada: ' + osId);
 
     const col = getCol(campo);
-    if (!col) return { sucesso: false, erro: 'Coluna ' + campo + ' nao existe na planilha (rode rodarSetupSheets)' };
+    if (!col) return _recusa('Coluna ' + campo + ' nao existe na planilha (rode rodarSetupSheets)');
 
     const bytes = Utilities.base64Decode(base64Data);
     const blob = Utilities.newBlob(bytes, mimeType || 'image/jpeg', nomeArquivo || (campo + '_' + osId + '.jpg'));
@@ -460,7 +460,7 @@ const CONFIRMACOES_SEGURANCA_MIN = ['epi', 'aterramento', 'bloqueio_energia', 's
 
 function confirmarSegurancaPreExecucao(osId, tecnicoId, confirmacoes, temNaoConformidade, operationId, dispositivoId) {
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return { sucesso: false, erro: posse.erro };
+  if (!posse.ok) return _recusa(posse.erro);
   // tipo_operacao pro Log_Central: a lista fechada aprovada (Geovane/
   // Cowork 2, 12/08) nao tem categoria propria pra "confirmacao de
   // seguranca" -- aproximado pra CHECKLIST_RESPOSTA (o mais proximo
@@ -471,15 +471,15 @@ function confirmarSegurancaPreExecucao(osId, tecnicoId, confirmacoes, temNaoConf
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const osSheet = ss.getSheetByName('Ordens_Servico');
     const osRow = encontrarLinha(osSheet, osId, 0);
-    if (!osRow) return { sucesso: false, erro: 'OS nao encontrada: ' + osId };
+    if (!osRow) return _recusa('OS nao encontrada: ' + osId);
 
     const colEstado = getCol('Estado_Seguranca');
-    if (!colEstado) return { sucesso: false, erro: 'Coluna Estado_Seguranca nao existe na planilha (rode rodarSetupSheets)' };
+    if (!colEstado) return _recusa('Coluna Estado_Seguranca nao existe na planilha (rode rodarSetupSheets)');
 
     const c = confirmacoes || {};
     const faltando = CONFIRMACOES_SEGURANCA_MIN.filter(item => !c[item]);
     if (faltando.length) {
-      return { sucesso: false, erro: 'Confirmacoes de seguranca incompletas', faltando: faltando };
+      return _recusa('Confirmacoes de seguranca incompletas', { faltando: faltando, motivos: faltando });
     }
 
     const novoEstado = temNaoConformidade ? 'Bloqueado' : 'Liberado';
@@ -510,7 +510,7 @@ const EPI_ITENS_MIN = ['capacete', 'luvas_isolantes', 'oculos_protecao', 'calcad
 
 function salvarSelfieEPI(osId, tecnicoId, base64Selfie, mimeType, epiChecklist, diarioTexto, operationId, dispositivoId) {
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return { sucesso: false, erro: posse.erro };
+  if (!posse.ok) return _recusa(posse.erro);
   // tipo_operacao pro Log_Central: sem categoria propria "selfie" na
   // lista aprovada -- aproximado pra UPLOAD_FOTO (a selfie e uma foto;
   // EPI/diario sao dados secundarios na mesma chamada). Sinalizado, nao
@@ -519,7 +519,7 @@ function salvarSelfieEPI(osId, tecnicoId, base64Selfie, mimeType, epiChecklist, 
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const osSheet = ss.getSheetByName('Ordens_Servico');
     const osRow = encontrarLinha(osSheet, osId, 0);
-    if (!osRow) return { sucesso: false, erro: 'OS nao encontrada: ' + osId };
+    if (!osRow) return _recusa('OS nao encontrada: ' + osId);
 
     const colSelfie = getCol('Selfie_URL');
     const colEpiOk = getCol('EPI_Checklist_OK');
@@ -527,7 +527,7 @@ function salvarSelfieEPI(osId, tecnicoId, base64Selfie, mimeType, epiChecklist, 
     const colDiario = getCol('Diario_Tecnico');
     const colDiarioOk = getCol('Diario_Preenchido');
     if (!colSelfie || !colEpiOk || !colEpiJson || !colDiario || !colDiarioOk) {
-      return { sucesso: false, erro: 'Colunas de Selfie/EPI/Diario nao existem na planilha (rode rodarSetupSheets)' };
+      return _recusa('Colunas de Selfie/EPI/Diario nao existem na planilha (rode rodarSetupSheets)');
     }
 
     let urlNova = '';
@@ -644,6 +644,30 @@ function verificarPosseOS(osId, tecnicoId) {
     return { ok: false, erro: 'Tecnico ' + tecnicoId + ' nao tem posse da OS ' + osId };
   }
   return { ok: true };
+}
+
+// ─── _recusa — envelope canonico de rejeicao ─────────────────────
+// Achado do Code 2 (revisao das 5 fatias em conjunto, citacao direta de
+// codigo): processarFilaOffline so reconhecia uma recusa do backend
+// como DIVERGENT quando a resposta tinha `blockingReasons` -- formato
+// exclusivo de canCloseOS/encerrarOS. Toda outra forma de recusa
+// (exigeJustificativa do KM, erro+faltando do checklist, e os
+// contratos novos de ferramental/aceite-oferta) passava batido: sem
+// blockingReasons, o item era marcado SYNCED e removido da fila em
+// silencio, mesmo tendo sido recusado -- o tecnico nunca ficava
+// sabendo que a escrita nao aconteceu.
+//
+// Fix estrutural, nao so mais um campo novo no processarFilaOffline:
+// TODA funcao de escrita que recusa passa a devolver o MESMO envelope
+// -- sucesso:false + erro (string) SEMPRE presentes, motivos (array de
+// strings) generalizando blockingReasons/faltando/exigeJustificativa
+// num campo unico. Ver CONTRATO-FRONTEND-ENVELOPE-RECUSA.md pro que o
+// frontend deve checar (response.sucesso===false), nao mais um campo
+// especifico por funcao. Campos legados (blockingReasons/faltando/
+// exigeJustificativa/mensagem) continuam presentes via `extras` --
+// nao removidos, nada que ja leia eles quebra.
+function _recusa(erro, extras) {
+  return Object.assign({ sucesso: false, erro: erro, motivos: [erro] }, extras || {});
 }
 
 // ─── encontrarOuCriarLinhaDiaria ──────────────────────────────────
@@ -939,7 +963,7 @@ function registrarInicioDia(tecnicoId, tecnicoNome, usaVeiculo, kmInicial, veicu
   return executarIdempotente(operationId, 'APONTAMENTO', '', tecnicoId, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Diaria_Tecnico');
-  if (!sheet) return { erro: 'Aba Diaria_Tecnico nao encontrada' };
+  if (!sheet) return _recusa('Aba Diaria_Tecnico nao encontrada');
   addMissingHeaders();
   const hoje = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   const now = new Date();
@@ -966,7 +990,7 @@ function registrarFimDia(tecnicoId, kmFinal, operationId, dispositivoId) {
   return executarIdempotente(operationId, 'APONTAMENTO', '', tecnicoId, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Diaria_Tecnico');
-  if (!sheet) return { erro: 'Aba Diaria_Tecnico nao encontrada' };
+  if (!sheet) return _recusa('Aba Diaria_Tecnico nao encontrada');
   const hoje = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   const now = new Date();
   const dados = sheet.getDataRange().getValues();
@@ -977,7 +1001,7 @@ function registrarFimDia(tecnicoId, kmFinal, operationId, dispositivoId) {
       : String(dados[i][0]).substring(0, 10);
     if (dl === hoje && String(dados[i][1]) === String(tecnicoId)) { linha = i + 1; break; }
   }
-  if (!linha) return { erro: 'Registro do dia nao encontrado' };
+  if (!linha) return _recusa('Registro do dia nao encontrado');
   sheet.getRange(linha, 5).setValue(now);  // Hora_Saida
   sheet.getRange(linha, 13).setValue('Encerrado'); // Status_Dia
   let kmRodado = 0;
@@ -1002,7 +1026,7 @@ function registrarFimDia(tecnicoId, kmFinal, operationId, dispositivoId) {
 function registrarUsoVeiculo(tecnicoId, usaVeiculo) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Diaria_Tecnico');
-  if (!sheet) return { erro: 'Aba Diaria_Tecnico nao encontrada' };
+  if (!sheet) return _recusa('Aba Diaria_Tecnico nao encontrada');
   addMissingHeaders();
   const hoje = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   const linha = encontrarOuCriarLinhaDiaria(sheet, tecnicoId, hoje);
@@ -1014,13 +1038,13 @@ function registrarUsoVeiculo(tecnicoId, usaVeiculo) {
 // ─── iniciarOS ───────────────────────────────────────────────────
 function iniciarOS(osId, tecnicoId, tecnicoNome, local) {
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return { erro: posse.erro };
+  if (!posse.ok) return _recusa(posse.erro);
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const now = new Date();
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
-  if (!osRow) return { erro: 'OS nao encontrada: ' + osId };
+  if (!osRow) return _recusa('OS nao encontrada: ' + osId);
 
   const updates = {
     'Status': 'Em Andamento',
@@ -1069,7 +1093,7 @@ function pausarOS(osId, tecnicoId, tecnicoNome, motivo, osInterrupcaoId, operati
   const now = new Date();
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
-  if (!osRow) return { erro: 'OS nao encontrada: ' + osId };
+  if (!osRow) return _recusa('OS nao encontrada: ' + osId);
 
   const colRet = getCol('Hora_Ultima_Retomada');
   const colIni = getCol('Hora_Inicio');
@@ -1118,7 +1142,7 @@ function retomarOS(osId, tecnicoId, tecnicoNome, operationId, dispositivoId) {
   const now = new Date();
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
-  if (!osRow) return { erro: 'OS nao encontrada: ' + osId };
+  if (!osRow) return _recusa('OS nao encontrada: ' + osId);
 
   const colProd = getCol('Horas_Produtivas');
   const colQtdRet = getCol('Qtd_Retomadas');
@@ -1252,18 +1276,18 @@ function canCloseOS(osId, dadosPendentes) {
 // ─── encerrarOS ──────────────────────────────────────────────────
 function encerrarOS(osId, tecnicoId, tecnicoNome, dadosEnc) {
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return { sucesso: false, erro: posse.erro };
+  if (!posse.ok) return _recusa(posse.erro);
 
   const check = canCloseOS(osId, { fotosURL: dadosEnc.fotosURL || '' });
   if (!check.allowed) {
-    return { sucesso: false, erro: 'OS nao pode ser concluida ainda', blockingReasons: check.blockingReasons };
+    return _recusa('OS nao pode ser concluida ainda', { blockingReasons: check.blockingReasons, motivos: check.blockingReasons });
   }
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const now = new Date();
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
-  if (!osRow) return { erro: 'OS nao encontrada: ' + osId };
+  if (!osRow) return _recusa('OS nao encontrada: ' + osId);
 
   const colEmPausa = getCol('Em_Pausa_Agora');
   const colProd = getCol('Horas_Produtivas');
@@ -1329,7 +1353,7 @@ function criarOSEmergencia(dados) {
   // desprezivel sem mudar o prefixo 'EMG-' que o resto do sistema reconhece.
   const novoId = 'EMG-' + Utilities.formatDate(now, TZ, 'yyyyMMddHHmmss') + '-' + Math.floor(100 + Math.random() * 900);
   const osSheet = ss.getSheetByName('Ordens_Servico');
-  if (!osSheet) return { erro: 'Aba Ordens_Servico nao encontrada' };
+  if (!osSheet) return _recusa('Aba Ordens_Servico nao encontrada');
 
   const headers = osSheet.getRange(1, 1, 1, osSheet.getLastColumn()).getValues()[0];
   const novaOS = new Array(headers.length).fill('');
@@ -1547,7 +1571,7 @@ function salvarResposta(osId, idSharePointOS, perguntaId, textoPergunta,
   return executarIdempotente(operationId, 'CHECKLIST_RESPOSTA', osId, tecnico, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const respSheet = ss.getSheetByName('Checklist_Respostas');
-  if (!respSheet) return { erro: 'Aba Checklist_Respostas nao encontrada' };
+  if (!respSheet) return _recusa('Aba Checklist_Respostas nao encontrada');
   respSheet.appendRow([
     osId,
     idSharePointOS || '',
@@ -1591,20 +1615,20 @@ const FASES_CHECKLIST_VALIDAS = ['Pré-Execução', 'Execução', 'Pós-Execuç�
 
 function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) {
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return { sucesso: false, erro: posse.erro };
+  if (!posse.ok) return _recusa(posse.erro);
 
   if (FASES_CHECKLIST_VALIDAS.indexOf(fase) < 0) {
-    return { sucesso: false, erro: 'Fase invalida: ' + fase };
+    return _recusa('Fase invalida: ' + fase);
   }
 
   return executarIdempotente(operationId, 'CHECKLIST_RESPOSTA', osId, tecnicoId, dispositivoId, () => {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const osSheet = ss.getSheetByName('Ordens_Servico');
     const osRow = encontrarLinha(osSheet, osId, 0);
-    if (!osRow) return { sucesso: false, erro: 'OS nao encontrada: ' + osId };
+    if (!osRow) return _recusa('OS nao encontrada: ' + osId);
 
     const pergSheet = ss.getSheetByName('Perguntas_Checklist');
-    if (!pergSheet) return { sucesso: false, erro: 'Aba Perguntas_Checklist nao encontrada' };
+    if (!pergSheet) return _recusa('Aba Perguntas_Checklist nao encontrada');
     const pDados = pergSheet.getDataRange().getValues();
     const pH = pDados[0];
     const idxFase = pH.indexOf('Fase_Execucao');
@@ -1612,7 +1636,7 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
     const idxAtivo = pH.indexOf('Ativo');
     const idxIdPerg = pH.indexOf('ID_Pergunta');
     if (idxFase < 0 || idxObrig < 0) {
-      return { sucesso: false, erro: 'Colunas Fase_Execucao/Obrigatoria nao existem na planilha (rode rodarSetupSheets)' };
+      return _recusa('Colunas Fase_Execucao/Obrigatoria nao existem na planilha (rode rodarSetupSheets)');
     }
 
     const ehVerdadeiro = (v) => v === true || v === 'TRUE' || v === 'true';
@@ -1624,7 +1648,7 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
       .map(row => row[idxIdPerg]);
 
     const respSheet = ss.getSheetByName('Checklist_Respostas');
-    if (!respSheet) return { sucesso: false, erro: 'Aba Checklist_Respostas nao encontrada' };
+    if (!respSheet) return _recusa('Aba Checklist_Respostas nao encontrada');
     const rDados = respSheet.getDataRange().getValues();
     const rH = rDados[0];
     const idxROS = rH.indexOf('ID_OS');
@@ -1635,7 +1659,8 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
 
     const faltando = obrigatoriasDaFase.filter(id => idsRespondidos.indexOf(id) < 0);
     if (faltando.length) {
-      return { sucesso: false, completa: false, fase: fase, faltando: faltando };
+      return _recusa('Fase incompleta: faltam perguntas obrigatorias (' + faltando.join(', ') + ')',
+        { completa: false, fase: fase, faltando: faltando, motivos: faltando });
     }
 
     const temNC = respostasDaOS.some(row =>
@@ -1643,7 +1668,7 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
 
     if (fase === 'Pré-Execução') {
       const colEstado = getCol('Estado_Seguranca');
-      if (!colEstado) return { sucesso: false, erro: 'Coluna Estado_Seguranca nao existe na planilha (rode rodarSetupSheets)' };
+      if (!colEstado) return _recusa('Coluna Estado_Seguranca nao existe na planilha (rode rodarSetupSheets)');
       const novoEstado = temNC ? 'Bloqueado' : 'Liberado';
       osSheet.getRange(osRow, colEstado).setValue(novoEstado);
       return { sucesso: true, completa: true, fase: fase, estado: novoEstado };
@@ -1651,7 +1676,7 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
 
     if (fase === 'Execução') {
       const colExec = getCol('Checklist_Execucao_Completo');
-      if (!colExec) return { sucesso: false, erro: 'Coluna Checklist_Execucao_Completo nao existe na planilha (rode rodarSetupSheets)' };
+      if (!colExec) return _recusa('Coluna Checklist_Execucao_Completo nao existe na planilha (rode rodarSetupSheets)');
       osSheet.getRange(osRow, colExec).setValue(true);
       return { sucesso: true, completa: true, fase: fase };
     }
@@ -1796,14 +1821,14 @@ function registrarAceiteOferta(ofertaId, tecnicoId, aceito, motivoRecusa, operat
   return executarIdempotente(operationId, 'ACEITE_CLIENTE', ofertaId, tecnicoId, dispositivoId, () => {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const sheet = ss.getSheetByName('Alocacoes_Ofertas');
-    if (!sheet) return { sucesso: false, erro: 'Aba Alocacoes_Ofertas nao encontrada' };
+    if (!sheet) return _recusa('Aba Alocacoes_Ofertas nao encontrada');
 
     const ultima = _ultimaLinhaOferta(sheet, ofertaId);
-    if (!ultima) return { sucesso: false, erro: 'Oferta nao encontrada: ' + ofertaId };
+    if (!ultima) return _recusa('Oferta nao encontrada: ' + ofertaId);
     const g = (campo) => ultima.valores[ultima.headers.indexOf(campo)];
 
     if (String(g('Tecnico_ID')) !== String(tecnicoId)) {
-      return { sucesso: false, erro: 'Tecnico ' + tecnicoId + ' nao tem posse desta oferta' };
+      return _recusa('Tecnico ' + tecnicoId + ' nao tem posse desta oferta');
     }
 
     // Revalida Pendente na hora de gravar -- protege contra corrida com
@@ -1811,11 +1836,11 @@ function registrarAceiteOferta(ofertaId, tecnicoId, aceito, motivoRecusa, operat
     // da MESMA operation_id nunca chega aqui, executarIdempotente ja
     // devolveu o resultado cacheado antes de rodar este fn() de novo).
     if (g('Status') !== 'Pendente') {
-      return { sucesso: false, erro: 'Oferta ja foi respondida', status: g('Status') };
+      return _recusa('Oferta ja foi respondida', { status: g('Status') });
     }
 
     if (aceito !== true && !(motivoRecusa && String(motivoRecusa).trim())) {
-      return { sucesso: false, erro: 'Motivo de recusa obrigatorio' };
+      return _recusa('Motivo de recusa obrigatorio');
     }
 
     const novoStatus = aceito === true ? 'Aceita' : 'Recusada';
@@ -1868,22 +1893,22 @@ const FERRAMENTAL_TIPOS_VALIDOS = ['Carga', 'Desmobilizacao'];
 // valor novo depois, e so adicionar na lista e trocar esta linha.
 function registrarMovimentoFerramental(osId, tecnicoId, patrimonioCodigo, tipoMovimento, estadoOk, observacao, operationId, dispositivoId) {
   if (FERRAMENTAL_TIPOS_VALIDOS.indexOf(tipoMovimento) < 0) {
-    return { sucesso: false, erro: 'Tipo de movimento invalido: ' + tipoMovimento };
+    return _recusa('Tipo de movimento invalido: ' + tipoMovimento);
   }
   if (!patrimonioCodigo || !String(patrimonioCodigo).trim()) {
-    return { sucesso: false, erro: 'Codigo de patrimonio obrigatorio' };
+    return _recusa('Codigo de patrimonio obrigatorio');
   }
   if (tipoMovimento === 'Desmobilizacao' && estadoOk === false && !(observacao && String(observacao).trim())) {
-    return { sucesso: false, erro: 'Observacao obrigatoria quando o estado nao esta OK' };
+    return _recusa('Observacao obrigatoria quando o estado nao esta OK');
   }
 
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return { sucesso: false, erro: posse.erro };
+  if (!posse.ok) return _recusa(posse.erro);
 
   return executarIdempotente(operationId, 'APONTAMENTO', osId, tecnicoId, dispositivoId, () => {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const sheet = ss.getSheetByName('Ferramental_Movimentos');
-    if (!sheet) return { sucesso: false, erro: 'Aba Ferramental_Movimentos nao encontrada' };
+    if (!sheet) return _recusa('Aba Ferramental_Movimentos nao encontrada');
 
     const movimentoId = Utilities.getUuid();
     sheet.appendRow([
@@ -2134,7 +2159,7 @@ function validarESalvarKMInicial(osId, tecnicoId, kmInicial, veiculoId, justific
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
-  if (!osRow) return { erro: 'OS nao encontrada: ' + osId };
+  if (!osRow) return _recusa('OS nao encontrada: ' + osId);
 
   const kmInicialNum = parseFloat(kmInicial) || 0;
   let flag = '', exigeJustificativa = false, referencia = null, limiar = null, tipoComparacao = '';
@@ -2168,12 +2193,9 @@ function validarESalvarKMInicial(osId, tecnicoId, kmInicial, veiculoId, justific
   }
 
   if (exigeJustificativa) {
-    return {
-      sucesso: false,
-      exigeJustificativa: true,
-      mensagem: 'Diferenca de ' + Math.round(kmInicialNum - referencia) + 'km detectada (' + tipoComparacao + '). '
-        + 'Informe justificativa por texto E foto do odometro para continuar.'
-    };
+    const mensagem = 'Diferenca de ' + Math.round(kmInicialNum - referencia) + 'km detectada (' + tipoComparacao + '). '
+      + 'Informe justificativa por texto E foto do odometro para continuar.';
+    return _recusa(mensagem, { exigeJustificativa: true, mensagem: mensagem });
   }
 
   const set = (campo, val) => { const col = getCol(campo); if (col) osSheet.getRange(osRow, col).setValue(val); };
@@ -2225,18 +2247,18 @@ function registrarKMFinalPendente(osId, tecnicoId, kmFinal, justificativaDesvio,
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
-  if (!osRow) return { erro: 'OS nao encontrada: ' + osId };
+  if (!osRow) return _recusa('OS nao encontrada: ' + osId);
 
   const colStatus = getCol('Status');
   const status = colStatus ? String(osSheet.getRange(osRow, colStatus).getValue()) : '';
-  if (status !== 'Concluída') return { erro: 'OS nao esta concluida, KM final nao se aplica ainda' };
+  if (status !== 'Concluída') return _recusa('OS nao esta concluida, KM final nao se aplica ainda');
 
   const colKmInicial = getCol('KM_Inicial_OS');
   const kmInicial = colKmInicial ? (parseFloat(osSheet.getRange(osRow, colKmInicial).getValue()) || 0) : 0;
   const kmFinalNum = parseFloat(kmFinal) || 0;
 
   if (kmFinalNum < kmInicial) {
-    return { sucesso: false, erro: 'KM final nao pode ser menor que o KM inicial desta OS (' + kmInicial + ')' };
+    return _recusa('KM final nao pode ser menor que o KM inicial desta OS (' + kmInicial + ')');
   }
 
   const diferenca = kmFinalNum - kmInicial;
@@ -2244,12 +2266,9 @@ function registrarKMFinalPendente(osId, tecnicoId, kmFinal, justificativaDesvio,
     const temFoto = !!fotoDesvioUrl;
     const temTexto = !!(justificativaDesvio && justificativaDesvio.trim());
     if (!temFoto || !temTexto) {
-      return {
-        sucesso: false,
-        exigeJustificativa: true,
-        mensagem: 'Trecho de ' + Math.round(diferenca) + 'km dentro desta OS. '
-          + 'Informe justificativa por texto E foto do odometro para continuar.'
-      };
+      const mensagem = 'Trecho de ' + Math.round(diferenca) + 'km dentro desta OS. '
+        + 'Informe justificativa por texto E foto do odometro para continuar.';
+      return _recusa(mensagem, { exigeJustificativa: true, mensagem: mensagem });
     }
   }
 
