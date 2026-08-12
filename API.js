@@ -156,6 +156,16 @@ function executarAcao(action, p) {
       return fecharFaseChecklist(p[0], p[1], p[2], p[3], p[4]);
     case 'consultarFaseChecklist':
       return consultarFaseChecklist(p[0]);
+    // Aceite de oferta via link profundo (CONTRATO-BACKEND-ACEITE-OFERTA.md).
+    case 'getOfertaAlocacao':
+      return getOfertaAlocacao(p[0], p[1], p[2], p[3]);
+    case 'registrarAceiteOferta':
+      return registrarAceiteOferta(p[0], p[1], p[2], p[3], p[4], p[5]);
+    // Ferramental — carga/desmobilizacao (CONTRATO-BACKEND-FERRAMENTAL.md).
+    case 'registrarMovimentoFerramental':
+      return registrarMovimentoFerramental(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+    case 'getFerramentalDaOS':
+      return getFerramentalDaOS(p[0]);
     default:
       return { erro: 'Acao desconhecida: ' + action };
   }

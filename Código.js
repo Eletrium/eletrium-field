@@ -115,10 +115,39 @@ function setupSheets() {
     });
   }
 
+  // Aceite de oferta via link profundo (CONTRATO-BACKEND-ACEITE-OFERTA.md) --
+  // append-only (evento, nao edicao), mesma filosofia de Checklist_Respostas/
+  // Log_Central. Quem gera a linha "Pendente" inicial fica fora deste
+  // contrato (provavelmente console do gestor, ver comentario em
+  // registrarAceiteOferta) -- aqui so lemos/anexamos eventos de resposta.
+  if (!ss.getSheetByName('Alocacoes_Ofertas')) {
+    const ofertas = ss.insertSheet('Alocacoes_Ofertas');
+    ofertas.getRange(1, 1, 1, ALOCACOES_OFERTAS_HEADERS.length).setValues([ALOCACOES_OFERTAS_HEADERS]);
+  }
+
+  // Ferramental -- carga/desmobilizacao (CONTRATO-BACKEND-FERRAMENTAL.md) --
+  // append-only, registro minimo por codigo de patrimonio digitado (sem
+  // validacao contra catalogo/calibracao/obrigatoriedade -- dependem de
+  // sync SharePoint->Sheets que nao existe, fora deste contrato).
+  if (!ss.getSheetByName('Ferramental_Movimentos')) {
+    const ferramental = ss.insertSheet('Ferramental_Movimentos');
+    ferramental.getRange(1, 1, 1, FERRAMENTAL_MOVIMENTOS_HEADERS.length).setValues([FERRAMENTAL_MOVIMENTOS_HEADERS]);
+  }
+
   addMissingHeaders();
   garantirLogCentral(ss);
   return 'Setup concluido! Abas e colunas criadas com sucesso.';
 }
+
+const ALOCACOES_OFERTAS_HEADERS = [
+  'Oferta_ID', 'OS_ID', 'Tecnico_ID', 'Escopo_Resumo', 'Valor_Proposto',
+  'Criada_Em', 'Expira_Em', 'Status', 'Respondida_Em', 'Motivo_Recusa', 'operation_id'
+];
+
+const FERRAMENTAL_MOVIMENTOS_HEADERS = [
+  'Movimento_ID', 'OS_ID', 'Tecnico_ID', 'Patrimonio_Codigo', 'Tipo_Movimento',
+  'Estado_OK', 'Observacao', 'Registrado_Em', 'operation_id'
+];
 
 // ─── hashPin / gerarSalt — Frente E (Diretriz v1.1): PIN nunca em texto
 // puro na planilha. Salt aleatorio por tecnico (Utilities.getUuid()),
@@ -1654,6 +1683,247 @@ function consultarFaseChecklist(osId) {
     estadoSeguranca: estadoSeguranca || null,
     execucaoCompleta: execucaoCompleta
   };
+}
+
+// ================================================================
+// ACEITE DE OFERTA — link profundo + PIN (CONTRATO-BACKEND-ACEITE-OFERTA.md)
+// ================================================================
+// Migra o registro de aceite do portal-alocacao.html (MSAL, morto por
+// construcao pro tecnico MEI sem conta Microsoft) pro PWA via PIN + link
+// profundo (SPEC-PWA-TECNICO.md §1). Identidade do tecnico: Tecnico_ID +
+// PIN, nunca e-mail. Quem GERA o link (mint da assinatura) fica fora
+// deste contrato -- provavelmente console do gestor, decisao separada.
+
+// Mesmo primitivo ja desenhado em DESENHO-FRENTE-E-AUTH-DISPATCHER.md
+// (Opcao A, token HMAC pos-PIN), aqui aplicado só a esta acao pontual
+// (assinatura por oferta) -- as duas coisas sao independentes, Opcao A
+// da sessao geral do dispatcher continua so desenhada, nao implementada.
+const OFERTA_SEGREDO_PROPERTY = 'OFERTA_HMAC_SECRET';
+
+function _bytesParaHex(bytes) {
+  return bytes.map(b => ('0' + ((b < 0 ? b + 256 : b)).toString(16)).slice(-2)).join('');
+}
+
+// Comparacao constant-effort (nao usa === com short-circuit, nem
+// .indexOf) -- defesa contra timing attack no oraculo de assinatura,
+// pedido explicito do contrato ("constant-time se possivel").
+function _hexIgualConstante(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+// Fail-closed: sem segredo configurado em Script Properties, NUNCA
+// valida (nao existe "assinatura correta" possivel sem segredo real).
+function verificarAssinaturaOferta(ofertaId, tecnicoId, exp, sig) {
+  const segredo = PropertiesService.getScriptProperties().getProperty(OFERTA_SEGREDO_PROPERTY);
+  if (!segredo || !sig) return false;
+  const payload = String(ofertaId) + '|' + String(tecnicoId) + '|' + String(exp);
+  const bytes = Utilities.computeHmacSha256Signature(payload, segredo);
+  const sigEsperada = _bytesParaHex(bytes);
+  return _hexIgualConstante(sigEsperada.toLowerCase(), String(sig).trim().toLowerCase());
+}
+
+// Ultima linha (a mais recente, append-only) para este Oferta_ID -- o
+// evento de resposta (registrarAceiteOferta) ANEXA uma linha nova em vez
+// de editar a original, entao "o estado atual da oferta" e sempre a
+// ULTIMA linha com este Oferta_ID, nao a primeira.
+function _ultimaLinhaOferta(sheet, ofertaId) {
+  const dados = sheet.getDataRange().getValues();
+  const h = dados[0];
+  const idxId = h.indexOf('Oferta_ID');
+  let ultima = null;
+  for (let i = 1; i < dados.length; i++) {
+    if (String(dados[i][idxId]) === String(ofertaId)) ultima = { linha: i + 1, headers: h, valores: dados[i] };
+  }
+  return ultima;
+}
+
+// getOfertaAlocacao — so leitura. Assinatura errada (ou qualquer campo do
+// link adulterado -- id/tecnico/exp entram todos no payload assinado, IN
+// alterar qualquer um invalida sig) -> erro generico "Link invalido", sem
+// revelar se a oferta existe. So depois da assinatura bater e que
+// checamos expiracao/status -- nessa ordem, autenticacao antes de
+// qualquer dado de negocio.
+function getOfertaAlocacao(ofertaId, tecnicoId, exp, sig) {
+  if (!verificarAssinaturaOferta(ofertaId, tecnicoId, exp, sig)) {
+    return { encontrada: false, erro: 'Link invalido' };
+  }
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName('Alocacoes_Ofertas');
+  if (!sheet) return { encontrada: false, erro: 'Oferta nao encontrada' };
+  const ultima = _ultimaLinhaOferta(sheet, ofertaId);
+  if (!ultima) return { encontrada: false, erro: 'Oferta nao encontrada' };
+
+  const g = (campo) => ultima.valores[ultima.headers.indexOf(campo)];
+
+  if (Number(exp) * 1000 < Date.now()) {
+    return { encontrada: true, expirada: true, expiraEm: g('Expira_Em') };
+  }
+
+  const status = g('Status');
+  if (status !== 'Pendente') {
+    return { encontrada: true, status: status };
+  }
+
+  return {
+    encontrada: true,
+    status: 'Pendente',
+    osId: g('OS_ID'),
+    escopoResumo: g('Escopo_Resumo'),
+    valorProposto: g('Valor_Proposto'),
+    expiraEm: g('Expira_Em')
+  };
+}
+
+// registrarAceiteOferta — evento NOVO (anexa linha, nao edita a
+// proposta original), passa por executarIdempotente (Frente D). Sem
+// parametro de assinatura aqui (o frontend so chega nesta tela depois
+// de getOfertaAlocacao+PIN ja terem validado) -- por isso, mesma
+// disciplina da Frente E (Opcao C), confere que tecnicoId bate com o
+// Tecnico_ID gravado na oferta antes de aceitar a escrita. Extensao do
+// padrao estabelecido pras outras escritas criticas -- escrita nova,
+// nao ficaria de fora.
+//
+// tipo_operacao pro Log_Central: ACEITE_CLIENTE e o unico valor da
+// lista fechada aprovada (Geovane/Cowork 2) com formato de "aceite" --
+// usado aqui pro tecnico aceitando/recusando a oferta (nao literalmente
+// um cliente aceitando algo, mas e a categoria mais proxima da lista
+// aprovada; sinalizado, nao escolhido silenciosamente).
+function registrarAceiteOferta(ofertaId, tecnicoId, aceito, motivoRecusa, operationId, dispositivoId) {
+  return executarIdempotente(operationId, 'ACEITE_CLIENTE', ofertaId, tecnicoId, dispositivoId, () => {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName('Alocacoes_Ofertas');
+    if (!sheet) return { sucesso: false, erro: 'Aba Alocacoes_Ofertas nao encontrada' };
+
+    const ultima = _ultimaLinhaOferta(sheet, ofertaId);
+    if (!ultima) return { sucesso: false, erro: 'Oferta nao encontrada: ' + ofertaId };
+    const g = (campo) => ultima.valores[ultima.headers.indexOf(campo)];
+
+    if (String(g('Tecnico_ID')) !== String(tecnicoId)) {
+      return { sucesso: false, erro: 'Tecnico ' + tecnicoId + ' nao tem posse desta oferta' };
+    }
+
+    // Revalida Pendente na hora de gravar -- protege contra corrida com
+    // outra resposta ja registrada por uma operation_id DIFERENTE (retry
+    // da MESMA operation_id nunca chega aqui, executarIdempotente ja
+    // devolveu o resultado cacheado antes de rodar este fn() de novo).
+    if (g('Status') !== 'Pendente') {
+      return { sucesso: false, erro: 'Oferta ja foi respondida', status: g('Status') };
+    }
+
+    if (aceito !== true && !(motivoRecusa && String(motivoRecusa).trim())) {
+      return { sucesso: false, erro: 'Motivo de recusa obrigatorio' };
+    }
+
+    const novoStatus = aceito === true ? 'Aceita' : 'Recusada';
+    sheet.appendRow([
+      ofertaId,
+      g('OS_ID'),
+      tecnicoId,
+      g('Escopo_Resumo'),
+      g('Valor_Proposto'),
+      g('Criada_Em'),
+      g('Expira_Em'),
+      novoStatus,
+      new Date(),
+      aceito === true ? '' : String(motivoRecusa).trim(),
+      operationId || ''
+    ]);
+
+    return { sucesso: true, status: novoStatus };
+  });
+}
+
+// ================================================================
+// FERRAMENTAL — carga/desmobilizacao (CONTRATO-BACKEND-FERRAMENTAL.md)
+// ================================================================
+// Registro append-only minimo: o tecnico digita o codigo do patrimonio
+// (etiqueta fisica) em vez de escolher de uma lista. SEM validacao de
+// catalogo/calibracao/obrigatoriedade por tipo de OS -- essas 3 travas
+// de seguranca reais do fluxo do gestor (web/ferramental.html) dependem
+// de dado que so existe no SharePoint hoje; portar exige um sync novo
+// (decisao de dono + Cowork), fora deste contrato. Documentada a
+// lacuna, nao escondida.
+const FERRAMENTAL_TIPOS_VALIDOS = ['Carga', 'Desmobilizacao'];
+
+// registrarMovimentoFerramental — fail-closed nos 3 pontos que o
+// contrato pede: tipo fora da lista, patrimonio vazio, e
+// Estado_OK=false sem observacao (só relevante em Desmobilizacao) --
+// tudo validado ANTES de executarIdempotente (entrada mal formada nao
+// deveria consumir Log_Central), mesmo padrao ja usado em
+// fecharFaseChecklist pra "fase invalida". Mesma checagem de posse
+// (Frente E, Opcao C) das outras escritas criticas.
+//
+// tipo_operacao pro Log_Central: o contrato propos 'FERRAMENTAL', que
+// NAO esta na lista fechada aprovada (Geovane/Cowork 2) --
+// CHECKLIST_RESPOSTA/UPLOAD_FOTO/ACEITE_CLIENTE/REGISTRO_KM/
+// APONTAMENTO/ASSINATURA/REGISTRO_MEDICAO/CONCLUSAO_OS. Usei
+// APONTAMENTO (categoria mais proxima: evento de dado de campo, mesma
+// familia de iniciarOSComGeo/pausarOS/retomarOS) em vez do valor
+// literal do contrato -- sinalizado aqui e no relatorio pro Geovane,
+// nao escolhido silenciosamente. Se 'FERRAMENTAL' for aprovado como
+// valor novo depois, e so adicionar na lista e trocar esta linha.
+function registrarMovimentoFerramental(osId, tecnicoId, patrimonioCodigo, tipoMovimento, estadoOk, observacao, operationId, dispositivoId) {
+  if (FERRAMENTAL_TIPOS_VALIDOS.indexOf(tipoMovimento) < 0) {
+    return { sucesso: false, erro: 'Tipo de movimento invalido: ' + tipoMovimento };
+  }
+  if (!patrimonioCodigo || !String(patrimonioCodigo).trim()) {
+    return { sucesso: false, erro: 'Codigo de patrimonio obrigatorio' };
+  }
+  if (tipoMovimento === 'Desmobilizacao' && estadoOk === false && !(observacao && String(observacao).trim())) {
+    return { sucesso: false, erro: 'Observacao obrigatoria quando o estado nao esta OK' };
+  }
+
+  const posse = verificarPosseOS(osId, tecnicoId);
+  if (!posse.ok) return { sucesso: false, erro: posse.erro };
+
+  return executarIdempotente(operationId, 'APONTAMENTO', osId, tecnicoId, dispositivoId, () => {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName('Ferramental_Movimentos');
+    if (!sheet) return { sucesso: false, erro: 'Aba Ferramental_Movimentos nao encontrada' };
+
+    const movimentoId = Utilities.getUuid();
+    sheet.appendRow([
+      movimentoId,
+      osId,
+      tecnicoId,
+      String(patrimonioCodigo).trim(),
+      tipoMovimento,
+      estadoOk === true,
+      observacao || '',
+      new Date(),
+      operationId || ''
+    ]);
+
+    return { sucesso: true, movimentoId: movimentoId };
+  });
+}
+
+// getFerramentalDaOS — so leitura, todos os movimentos ja registrados
+// nesta OS (nao so o ultimo -- carga e desmobilizacao sao eventos
+// distintos, ambos relevantes). So pra MOSTRAR o que ja foi registrado;
+// nao deriva nenhum estado "atual" (isso e exatamente o que a trava
+// real do SharePoint resolve, fora deste contrato).
+function getFerramentalDaOS(osId) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName('Ferramental_Movimentos');
+  if (!sheet) return [];
+  const dados = sheet.getDataRange().getValues();
+  if (dados.length < 2) return [];
+  const h = dados[0];
+  const idxOS = h.indexOf('OS_ID');
+  return dados.slice(1)
+    .filter(row => String(row[idxOS]) === String(osId))
+    .map(row => ({
+      patrimonioCodigo: row[h.indexOf('Patrimonio_Codigo')],
+      tipoMovimento: row[h.indexOf('Tipo_Movimento')],
+      estadoOk: row[h.indexOf('Estado_OK')],
+      observacao: row[h.indexOf('Observacao')],
+      registradoEm: row[h.indexOf('Registrado_Em')]
+    }));
 }
 
 // ================================================================
