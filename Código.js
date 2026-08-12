@@ -836,11 +836,13 @@ function iniciarOS(osId, tecnicoId, tecnicoNome, local) {
 // ─── iniciarOSComGeo ─────────────────────────────────────────────
 // Versao de iniciarOS com coordenadas GPS do navegador.
 // Local_Evento em OS_Segmentos recebe "descricao [lat,lng]".
-function iniciarOSComGeo(osId, tecnicoId, tecnicoNome, local, lat, lng) {
-  const localComGeo = (lat && lng)
-    ? ((local ? local + ' ' : '') + '[' + lat + ',' + lng + ']')
-    : (local || '');
-  return iniciarOS(osId, tecnicoId, tecnicoNome, localComGeo);
+function iniciarOSComGeo(osId, tecnicoId, tecnicoNome, local, lat, lng, operationId, dispositivoId) {
+  return executarIdempotente(operationId, 'APONTAMENTO', osId, tecnicoId, dispositivoId, () => {
+    const localComGeo = (lat && lng)
+      ? ((local ? local + ' ' : '') + '[' + lat + ',' + lng + ']')
+      : (local || '');
+    return iniciarOS(osId, tecnicoId, tecnicoNome, localComGeo);
+  });
 }
 
 // ─── encerrarOSComGeo ────────────────────────────────────────────

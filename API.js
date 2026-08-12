@@ -63,7 +63,7 @@ function executarAcao(action, p) {
     case 'getOsDoTecnico':
       return getOsDoTecnico(p[0]);
     case 'iniciarOSComGeo':
-      return iniciarOSComGeo(p[0], p[1], p[2], p[3], p[4], p[5]);
+      return iniciarOSComGeo(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
     // Frente D (idempotência) — últimos 2 params são operationId/
     // dispositivoId em todo case abaixo que ganhou o tratamento;
     // opcionais, chamador antigo sem eles continua funcionando.
