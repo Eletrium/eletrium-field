@@ -293,8 +293,14 @@ function garantirLogCentral(ss) {
 
   const idxTentativasValid = nomes.indexOf('tentativas') + 1;
   const rangeTentativas = sheet.getRange(2, idxTentativasValid, LOG_CENTRAL_LINHAS_VALIDACAO - 1, 1);
+  // Planilha em locale pt-BR -- formulas customizadas de data validation
+  // exigem ';' como separador de argumento, nao ',' (mesma armadilha de
+  // localizacao ja documentada do lado SharePoint com ValidationFormula/
+  // OR->OU). Vírgula aqui falha com "argumento da regra de validacao de
+  // dados e invalido" -- confirmado ao vivo, so essa formula no projeto
+  // usa requireFormulaSatisfied (as outras 3 sao requireValueInList).
   const regraTentativas = SpreadsheetApp.newDataValidation()
-    .requireFormulaSatisfied('=AND(ISNUMBER(K2), K2>=0, K2=INT(K2))')
+    .requireFormulaSatisfied('=AND(ISNUMBER(K2); K2>=0; K2=INT(K2))')
     .setAllowInvalid(false)
     .build();
   rangeTentativas.setDataValidation(regraTentativas);
