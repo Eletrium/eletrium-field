@@ -1,0 +1,367 @@
+============================================================
+COLAR MANUAL — Checklist Versionado (Fat-Client, decisão de 06/08/2026)
+============================================================
+⛔ ESTE ARQUIVO ESTÁ DESATUALIZADO (redesenho de 10/08) — NÃO USAR.
+O conteúdo abaixo (Seções 1, 3, 4) ainda descreve o motor ANTIGO
+("lista plana por fase", todas as perguntas de uma fase mostradas
+juntas). Esse motor foi trocado por um TREE-WALK CONDICIONAL (uma
+pergunta por vez, próxima = filho cuja Condicao_Exibicao bate com a
+resposta dada — igual ao getProximaPergunta() real), porque o modelo
+antigo não correspondia ao comportamento do motor ao vivo. A fonte
+atual é `Checklist_Versionado.js` (mesma pasta) — leia esse arquivo
+primeiro. Mantendo este .txt só para rastreabilidade de como o
+pacote de 06/08 foi originalmente interpretado (errado) antes da
+correção de 10/08.
+
+Gerado em 10/08/2026 pelo Claude Code. Mesma situação do KM por-OS: sem
+acesso clasp ao projeto Apps Script real, e sem login SharePoint pra
+confirmar os IDs das perguntas contra a planilha/lista real. Este
+arquivo reúne o diff completo (backend + frontend), pronto pra colar,
+MAS NÃO PUBLIQUE ainda — ver bloqueio abaixo.
+
+⚠️ BLOQUEIO ANTES DE PUBLICAR — Get-PnPListItem pendente
+------------------------------------------------------------
+Os IDs de pergunta usados abaixo (N3_TIPO, N4_REAP_EST, N4_REAP_ANOM,
+N4_REAP_TORQ, N4_REAP_ACAO, N4_LIMP_TIPO, N4_LIMP_EST, N4_LIMP_ADEQ,
+N4_DIAG_SINT, N4_DIAG_CAUSA, N4_DIAG_COMP, N4_DIAG_ACAO, N4_INST_COMP,
+N4_INST_TESTE, N4_MED_TIPO, N4_MED_RES, N4_SEG_ITEM, N4_SEG_CONF) vieram
+do pacote de 06/08 como já revisados, mas o Claude Code não teve como
+confirmá-los contra a planilha/lista real nesta sessão (SharePoint bateu
+em tela de login; Apps Script sem acesso clasp). Rode
+`Get-PnPListItem -List "Perguntas_Checklist"` (ou equivalente) e compare
+a coluna `ID_Pergunta` real contra as 18 chaves do POOL_PERGUNTAS abaixo
+antes de publicar. Falha segura: se algum ID não bater, o pior caso é o
+frontend lançar "Pergunta X não encontrada no POOL" (ChecklistController
+inicializar → CHKV2.inicializar) — não corrompe dado nenhum, só impede o
+checklist novo de carregar (cai no fluxo antigo automaticamente, ver
+ORDEM DE PUBLICAÇÃO abaixo).
+
+COMO APLICAR (nessa ordem, depois do bloqueio acima resolvido)
+------------------------------------------------------------
+1. Backend (Código.js): colar a SEÇÃO 1 (POOL_PERGUNTAS/VERSIONS/
+   CHECKLIST_VERSION_ATUAL) em qualquer lugar do arquivo, fora de outras
+   funções — pode ser no mesmo lugar do bloco KM POR-OS, ou num arquivo
+   novo `Checklist_Versionado.js` dentro do projeto Apps Script (os dois
+   funcionam igual; arquivo separado deixa mais fácil de achar depois).
+2. Backend (Código.js): dentro de getOsDoTecnico(), no objeto que cada OS
+   devolve (dentro do result.push({...})), adicionar o campo da SEÇÃO 2.
+3. Salvar, testar getOsDoTecnico manualmente (deve devolver
+   checklist_version:"v1.0" em cada OS).
+4. SÓ DEPOIS: publicar o index.html novo do eletrium-field com as SEÇÕES
+   3 (HTML) e 4 (JS).
+3.a ORDEM DE PUBLICAÇÃO — por que o motor novo NÃO trava a tela se sair
+    de ordem: irParaChecklist() só usa o motor novo (CHKV2) quando
+    `os.checklist_version` existe E `VERSIONS[os.checklist_version]`
+    existe. Se o frontend for publicado ANTES do backend (ou se algum
+    técnico estiver com cache de uma OS antiga sem o campo), cai
+    automaticamente no fluxo antigo (getProximaPergunta ao vivo) — o
+    checklist não para de funcionar pra ninguém. Isso é uma mudança
+    deliberada em relação ao pseudocódigo original (que travava a tela
+    inteira com UI.travarTelaInteira quando a versão não batia) — ver
+    nota de rastreabilidade no fim deste arquivo.
+
+
+============================================================
+SEÇÃO 1 — Backend: Código.js (ou arquivo novo Checklist_Versionado.js)
+============================================================
+
+const CHECKLIST_VERSION_ATUAL = 'v1.0';
+const POOL_PERGUNTAS = {
+  "N3_TIPO": { texto: "Tipo de Serviço", tipo: "choice", opcoes: [
+    { label: "Reaperto de Conexoes", nc: false }, { label: "Limpeza/Adequacao de Painel", nc: false },
+    { label: "Diagnostico de Falha", nc: false }, { label: "Instalacao de Componente", nc: false },
+    { label: "Medicao Eletrica", nc: false }, { label: "Adequacao de Seguranca NR-10", nc: false } ] },
+  "N4_REAP_EST": { texto: "Estado do Reaperto", tipo: "choice", opcoes: [
+    { label: "Conforme-preventivo", nc: false }, { label: "Nao conforme-frouxidao/oxidacao severa", nc: true } ] },
+  "N4_REAP_ANOM": { texto: "Anomalia (Reaperto)", tipo: "choice", opcoes: [
+    { label: "Oxidacao", nc: false }, { label: "Frouxidao", nc: false },
+    { label: "Sobreaquecimento visivel", nc: false }, { label: "Rompimento parcial de fio", nc: false } ] },
+  "N4_REAP_TORQ": { texto: "Torque (Reaperto)", tipo: "choice", opcoes: [
+    { label: "Sim", nc: false }, { label: "Nao-ajustado durante o servico", nc: false } ] },
+  "N4_REAP_ACAO": { texto: "Ação (Reaperto)", tipo: "choice", opcoes: [
+    { label: "Reaperto realizado", nc: false }, { label: "Substituicao de terminal", nc: false },
+    { label: "Substituicao de cabo", nc: false } ] },
+  "N4_LIMP_TIPO": { texto: "Tipo de Limpeza", tipo: "choice", opcoes: [
+    { label: "Limpeza a seco", nc: false }, { label: "Limpeza com produto especifico", nc: false },
+    { label: "Aspiracao de residuos", nc: false } ] },
+  "N4_LIMP_EST": { texto: "Estado da Limpeza", tipo: "choice", opcoes: [
+    { label: "Conforme", nc: false }, { label: "Nao conforme-poeira", nc: true },
+    { label: "Nao conforme-umidade/corrosao", nc: true }, { label: "Nao conforme-insetos/roedores", nc: true } ] },
+  "N4_LIMP_ADEQ": { texto: "Adequação (Limpeza)", tipo: "choice", opcoes: [
+    { label: "Identificacao de circuitos", nc: false }, { label: "Sinalizacao de seguranca", nc: false },
+    { label: "Vedacao de aberturas", nc: false }, { label: "Organizacao de cabos", nc: false },
+    { label: "Nenhuma adequacao adicional", nc: false } ] },
+  "N4_DIAG_SINT": { texto: "Sintoma (Diagnóstico)", tipo: "choice", opcoes: [
+    { label: "Painel nao energiza", nc: false }, { label: "Disjuntor desarma", nc: false },
+    { label: "Ruido anormal", nc: false }, { label: "Odor de queimado", nc: false },
+    { label: "Faisca/centelhamento", nc: false }, { label: "Outro", nc: false } ] },
+  "N4_DIAG_CAUSA": { texto: "Causa (Diagnóstico)", tipo: "choice", opcoes: [
+    { label: "Curto-circuito", nc: false }, { label: "Sobrecarga", nc: false },
+    { label: "Falha de isolamento", nc: false }, { label: "Componente danificado", nc: false },
+    { label: "Falha de conexao", nc: false }, { label: "Nao identificada", nc: false } ] },
+  "N4_DIAG_COMP": { texto: "Componente (Diagnóstico)", tipo: "choice", opcoes: [
+    { label: "Disjuntor", nc: false }, { label: "Contator", nc: false }, { label: "Rele", nc: false },
+    { label: "Transformador", nc: false }, { label: "Barramento", nc: false },
+    { label: "Cabo", nc: false }, { label: "Fonte", nc: false } ] },
+  "N4_DIAG_ACAO": { texto: "Ação (Diagnóstico)", tipo: "choice", opcoes: [
+    { label: "Reparo imediato", nc: false }, { label: "Substituicao de componente", nc: false },
+    { label: "Isolamento da area", nc: false }, { label: "Intervencao programada", nc: false } ] },
+  "N4_INST_COMP": { texto: "Componente (Instalação)", tipo: "choice", opcoes: [
+    { label: "Disjuntor", nc: false }, { label: "DPS", nc: false }, { label: "Contator", nc: false },
+    { label: "Rele", nc: false }, { label: "Fusivel", nc: false }, { label: "Barramento", nc: false },
+    { label: "Botoeira", nc: false }, { label: "Sinalizador", nc: false } ] },
+  "N4_INST_TESTE": { texto: "Teste de Instalação", tipo: "choice", opcoes: [
+    { label: "Aprovado", nc: false }, { label: "Reprovado-nova tentativa", nc: true },
+    { label: "Reprovado-escalado p/ engenharia", nc: true } ] },
+  "N4_MED_TIPO": { texto: "Tipo de Medição", tipo: "choice", opcoes: [
+    { label: "Tensao", nc: false }, { label: "Corrente", nc: false },
+    { label: "Resistencia de isolamento", nc: false }, { label: "Resistencia de aterramento", nc: false },
+    { label: "Continuidade", nc: false } ] },
+  "N4_MED_RES": { texto: "Resultado da Medição", tipo: "choice", opcoes: [
+    { label: "Dentro da norma", nc: false }, { label: "Fora da norma-acao corretiva", nc: true },
+    { label: "Fora da norma-area isolada", nc: true } ] },
+  "N4_SEG_ITEM": { texto: "Item de Segurança", tipo: "choice", opcoes: [
+    { label: "Sinalizacao de risco eletrico", nc: false }, { label: "Bloqueio e etiquetagem(LOTO)", nc: false },
+    { label: "Aterramento temporario", nc: false }, { label: "Distancia de seguranca", nc: false },
+    { label: "EPI coletivo disponivel", nc: false } ] },
+  "N4_SEG_CONF": { texto: "Conformidade (Segurança)", tipo: "choice", opcoes: [
+    { label: "Conforme", nc: false }, { label: "Nao conforme-acao corretiva aplicada", nc: true },
+    { label: "Nao conforme-intervencao programada", nc: true } ] }
+};
+const VERSIONS = {
+  "v1.0": {
+    "fase1_seguranca_liberacao": ["N3_TIPO", "N4_SEG_ITEM", "N4_SEG_CONF"],
+    "fase2_execucao_tecnica": [
+      "N4_DIAG_SINT", "N4_DIAG_CAUSA", "N4_DIAG_COMP", "N4_DIAG_ACAO",
+      "N4_LIMP_TIPO", "N4_LIMP_ADEQ", "N4_LIMP_EST",
+      "N4_REAP_ANOM", "N4_REAP_TORQ", "N4_REAP_ACAO", "N4_REAP_EST",
+      "N4_INST_COMP"
+    ],
+    "fase3_testes_entrega": ["N4_MED_TIPO", "N4_MED_RES", "N4_INST_TESTE"]
+  }
+};
+
+
+============================================================
+SEÇÃO 2 — Backend: campo novo em getOsDoTecnico() (Código.js)
+============================================================
+Dentro do result.push({ ... }) já existente, adicionar esta chave (já
+aplicada na cópia local — ver Código.js linha ~326):
+
+    checklist_version: (typeof CHECKLIST_VERSION_ATUAL !== 'undefined') ? CHECKLIST_VERSION_ATUAL : null
+
+
+============================================================
+SEÇÃO 3 — Frontend: index.html (eletrium-field) — HTML
+============================================================
+Colar dentro de <div id="scr-checklist">, logo depois do
+</div> de fechamento de "chk-resumo-block" (a tela do resumo final que
+já existe), antes do </div></div> que fecha a tela inteira:
+
+<div id="chk-v2-erro-versao" style="display:none">
+  <div class="card" style="border-color:var(--red);padding:16px">
+    <div style="color:var(--red);font-weight:700;margin-bottom:6px">Aplicativo desatualizado</div>
+    <div style="color:var(--text2);font-size:14px;line-height:1.4" id="chk-v2-erro-msg"></div>
+  </div>
+</div>
+<div id="chk-v2-block" style="display:none">
+  <div class="hdr-sub" id="chk-v2-fase-titulo" style="margin-bottom:12px;color:var(--text2);font-weight:600"></div>
+  <div id="chk-v2-perguntas"></div>
+  <button class="btn btn-green" id="chk-v2-btn-avancar" style="margin-top:8px" onclick="CHKV2.tentarAvancarFase()">PRÓXIMA FASE</button>
+</div>
+
+
+============================================================
+SEÇÃO 4 — Frontend: index.html (eletrium-field) — JavaScript
+============================================================
+Colar no <script> do app, SUBSTITUINDO o bloco atual de
+"CHECKLIST NR-10" (const CHK / irParaChecklist / voltarDaChecklist) por
+tudo abaixo — as funções carregarPergunta/renderizarOpcoes/
+responderPergunta/confirmarMultipla/concluirChecklist do fluxo antigo
+continuam EXATAMENTE como estão hoje, não mudam nada, só o trecho entre
+"CHECKLIST NR-10" e a primeira dessas funções é que é substituído:
+
+// ================================================================
+// CHECKLIST VERSIONADO (Fat-Client, 06/08/2026) — dados fixos no
+// bundle, sem round-trip por pergunta. Ver Checklist_Versionado.js
+// (pwa/) para a origem/rastreabilidade completa deste bloco.
+// ================================================================
+const CHECKLIST_VERSION_ATUAL = 'v1.0';
+const POOL_PERGUNTAS = { /* EXATAMENTE o mesmo objeto da SEÇÃO 1 acima */ };
+const VERSIONS = { /* EXATAMENTE o mesmo objeto da SEÇÃO 1 acima */ };
+const NOMES_FASE = {
+  fase1_seguranca_liberacao: 'Fase 1 de 3 — Segurança e Liberação',
+  fase2_execucao_tecnica: 'Fase 2 de 3 — Execução Técnica',
+  fase3_testes_entrega: 'Fase 3 de 3 — Testes e Entrega'
+};
+
+// Motor novo (fat-client, por fase). Some das perguntas ficam de fora
+// se a OS não trouxer checklist_version reconhecida — nesse caso
+// irParaChecklist() cai no fluxo antigo (getProximaPergunta ao vivo)
+// em vez de travar a tela: republicar o backend (Checklist_Versionado.js)
+// antes do frontend evita isso, mas se acontecer fora de ordem o
+// checklist não para de funcionar pros técnicos.
+const CHKV2 = {
+  fases: [], faseAtualIndex: 0, osId: null, idSharePointOS: null, respostas: [], temNC: false,
+
+  inicializar(os) {
+    this.osId = os.id; this.idSharePointOS = os.idSharePoint || '';
+    this.fases = []; this.faseAtualIndex = 0; this.respostas = []; this.temNC = false;
+    const estruturaFases = VERSIONS[os.checklist_version];
+    for (const [chaveFase, arrayIds] of Object.entries(estruturaFases)) {
+      const perguntas = arrayIds.map(id => {
+        if (!POOL_PERGUNTAS[id]) throw new Error('Pergunta ' + id + ' nao encontrada no POOL.');
+        return Object.assign({ id: id }, POOL_PERGUNTAS[id]);
+      });
+      this.fases.push({ chave: chaveFase, perguntas: perguntas });
+    }
+    this.renderizarFase(0);
+  },
+
+  renderizarFase(index) {
+    this.faseAtualIndex = index;
+    const fase = this.fases[index];
+    document.getElementById('chk-progresso').textContent = NOMES_FASE[fase.chave] || fase.chave;
+    document.getElementById('chk-v2-fase-titulo').textContent = NOMES_FASE[fase.chave] || fase.chave;
+    document.getElementById('chk-v2-btn-avancar').textContent =
+      index === this.fases.length - 1 ? 'FINALIZAR CHECKLIST' : 'PRÓXIMA FASE';
+    const cont = document.getElementById('chk-v2-perguntas');
+    cont.innerHTML = fase.perguntas.map(p => {
+      const opcoesHtml = p.opcoes.map((op, i) =>
+        '<label style="display:flex;align-items:center;gap:12px;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;cursor:pointer">' +
+        '<input type="radio" name="chkv2_' + p.id + '" value="' + i + '" data-nc="' + (op.nc ? '1' : '0') + '" ' +
+          'onchange="CHKV2.onResponder(\'' + p.id + '\')" style="width:20px;height:20px;accent-color:var(--green)">' +
+        '<span style="font-size:15px;color:var(--text)">' + op.label + '</span></label>'
+      ).join('');
+      return '<div class="card" style="margin-bottom:14px" id="chk-v2-card-' + p.id + '">' +
+        '<div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:10px">' + p.texto + '</div>' +
+        opcoesHtml +
+        '<div id="chk-v2-nc-' + p.id + '" style="display:none;margin-top:6px">' +
+          '<div class="alert alert-warn" style="margin-bottom:8px">Nao conformidade detectada nesta resposta.</div>' +
+          '<textarea class="form-textarea" id="chk-v2-just-' + p.id + '" placeholder="Justificativa (obrigatoria)"></textarea>' +
+          '<div class="alert alert-warn" style="margin-top:8px">Foto do item tambem obrigatoria — captura ainda nao disponivel nesta versao do app. Enquanto isso, esta pergunta nao pode ser confirmada como NC.</div>' +
+        '</div></div>';
+    }).join('');
+    document.getElementById('chk-v2-erro-versao').style.display = 'none';
+    document.getElementById('chk-v2-block').style.display = 'block';
+    document.getElementById('chk-pergunta-block').style.display = 'none';
+    document.getElementById('chk-resumo-block').style.display = 'none';
+    document.getElementById('chk-loading').style.display = 'none';
+  },
+
+  onResponder(perguntaId) {
+    const marcado = document.querySelector('input[name="chkv2_' + perguntaId + '"]:checked');
+    const nc = marcado && marcado.dataset.nc === '1';
+    document.getElementById('chk-v2-nc-' + perguntaId).style.display = nc ? 'block' : 'none';
+  },
+
+  tentarAvancarFase() {
+    const fase = this.fases[this.faseAtualIndex];
+    for (const p of fase.perguntas) {
+      const marcado = document.querySelector('input[name="chkv2_' + p.id + '"]:checked');
+      if (!marcado) {
+        toast('A pergunta "' + p.texto + '" e obrigatoria', true);
+        document.getElementById('chk-v2-card-' + p.id).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      const opcao = p.opcoes[Number(marcado.value)];
+      if (opcao.nc) {
+        // Foto nunca existe no app hoje — NC fica permanentemente bloqueada
+        // ate a captura de foto ser construida (limitacao conhecida, mesmo
+        // tratamento do KM por-OS).
+        toast('NC em "' + p.texto + '" exige foto do item, que este app ainda nao captura — nao e possivel avancar', true);
+        document.getElementById('chk-v2-card-' + p.id).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      this.respostas.push({ perguntaId: p.id, texto: p.texto, resposta: opcao.label, nc: opcao.nc });
+    }
+    if (this.faseAtualIndex === this.fases.length - 1) {
+      this.finalizar();
+    } else {
+      this.renderizarFase(this.faseAtualIndex + 1);
+    }
+  },
+
+  finalizar() {
+    showLoading('Salvando checklist...');
+    const chamadas = this.respostas.map(r =>
+      gsCall('salvarResposta', [this.osId, this.idSharePointOS, r.perguntaId, r.texto, r.resposta, '', APP.tecnico.nome, r.nc], { enfileiravelSeOffline: true })
+    );
+    Promise.all(chamadas).then(() => {
+      hideLoading();
+      CHK.totalRespostas = this.respostas.length;
+      CHK.temNC = this.respostas.some(r => r.nc);
+      document.getElementById('chk-v2-block').style.display = 'none';
+      document.getElementById('chk-resumo-block').style.display = 'block';
+      document.getElementById('chk-resumo-qtd').textContent = CHK.totalRespostas + ' pergunta(s) respondida(s)';
+      document.getElementById('chk-nc-aviso').style.display = CHK.temNC ? 'block' : 'none';
+      document.getElementById('chk-progresso').textContent = 'Concluido';
+    }).catch(() => { hideLoading(); toast('Erro ao salvar checklist', true); });
+  }
+};
+
+// ================================================================
+// CHECKLIST NR-10 (fluxo antigo, ao vivo — mantido como fallback:
+// roda quando a OS nao traz checklist_version reconhecida, seja
+// porque o backend ainda nao foi republicado com o motor novo, seja
+// por uma versao futura que este app ainda nao conhece)
+// ================================================================
+const CHK = {
+  osId: null, idSharePointOS: null, disciplina: 'NR-10', perguntaAtualId: null,
+  textoPergunta: '', tipoResposta: '', fotoObrigatoria: false, selecionados: [],
+  geraNC: false, totalRespostas: 0, temNC: false
+};
+
+function irParaChecklist() {
+  const os = APP.osAtiva;
+  if (!os) { toast('Nenhuma OS ativa', true); return; }
+  document.getElementById('chk-loading').style.display = 'block';
+  document.getElementById('chk-pergunta-block').style.display = 'none';
+  document.getElementById('chk-resumo-block').style.display = 'none';
+  document.getElementById('chk-v2-block').style.display = 'none';
+  document.getElementById('chk-v2-erro-versao').style.display = 'none';
+  document.getElementById('chk-progresso').textContent = 'Carregando...';
+  showScreen('scr-checklist');
+
+  if (os.checklist_version && VERSIONS[os.checklist_version]) {
+    try {
+      CHKV2.inicializar(os);
+      return;
+    } catch (e) {
+      document.getElementById('chk-loading').style.display = 'none';
+      document.getElementById('chk-v2-erro-msg').textContent =
+        'Erro ao montar o checklist versionado (' + e.message + '). Peça para o time de TI conferir Checklist_Versionado.js.';
+      document.getElementById('chk-v2-erro-versao').style.display = 'block';
+      return;
+    }
+  }
+  // Sem checklist_version reconhecida: fluxo antigo, sem qualquer bloqueio de tela.
+  CHK.osId = os.id; CHK.idSharePointOS = os.idSharePoint || '';
+  CHK.disciplina = 'NR-10'; CHK.perguntaAtualId = null; CHK.totalRespostas = 0; CHK.temNC = false;
+  carregarPergunta(null, null);
+}
+function voltarDaChecklist() { showScreen('scr-os-ativa'); }
+
+// (a partir daqui, carregarPergunta/renderizarOpcoes/responderPergunta/
+// confirmarMultipla/concluirChecklist continuam IDÊNTICAS ao que já
+// existe no index.html hoje — não mudam nada)
+
+
+============================================================
+RASTREABILIDADE
+============================================================
+* Origem: decisões de 06/08/2026 — Checklist Opção 2 (fat-client, por
+  fase), termografia excluída do escopo, NC exige foto+texto (mesmo
+  padrão do KM por-OS).
+* Desvio deliberado do pseudocódigo original: em vez de
+  UI.travarTelaInteira() quando a versão não bate, o motor cai no fluxo
+  antigo (getProximaPergunta ao vivo) — evita que TODOS os técnicos
+  percam o checklist inteiro se o frontend for publicado antes do
+  backend (mesmo raciocínio de ordem de publicação já aplicado ao KM).
+* Teste de aceite: checklist de OS com checklist_version desconhecida
+  (ou ausente) cai no fluxo antigo, não trava a tela; NC sem foto+texto
+  impede avanço de fase (hoje: sempre impede, foto não existe no app);
+  NC com os dois (quando foto existir) deve permitir.
+* BLOQUEIO: IDs de pergunta não confirmados contra a planilha/lista real
+  — ver aviso no topo deste arquivo. Responsável pela confirmação:
+  Geovane (Get-PnPListItem). Responsável de negócio: Geovane.

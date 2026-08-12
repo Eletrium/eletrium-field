@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0D1117">
+  <title>Eletrium Field</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0D1117;
+  --bg2:#161B22;
+  --bg3:#21262D;
+  --green:#22B573;
+  --green2:#1A9A60;
+  --red:#E74C3C;
+  --yellow:#F39C12;
+  --gray:#8B949E;
+  --text:#E6EDF3;
+  --text2:#B3C0CC;
+  --border:#30363D;
+  --radius:12px;
+  --shadow:0 4px 20px rgba(0,0,0,.5);
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;overflow-x:hidden}
+
+/* Screens */
+.screen{display:none;min-height:100vh;flex-direction:column}
+.screen.active{display:flex}
+
+/* Header */
+.hdr{background:var(--bg2);padding:14px 16px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+.hdr-back{width:40px;height:40px;background:var(--bg3);border:none;border-radius:8px;color:var(--text);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.hdr-title{flex:1;font-size:18px;font-weight:700;color:var(--text)}
+.hdr-sub{font-size:12px;color:var(--gray);margin-top:1px}
+
+/* Content area */
+.content{flex:1;padding:16px;overflow-y:auto;padding-bottom:80px}
+
+/* Cards */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.card-title{font-size:13px;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.card-value{font-size:22px;font-weight:700;color:var(--text)}
+.card-sub{font-size:13px;color:var(--gray);margin-top:4px}
+
+/* Buttons */
+.btn{width:100%;padding:18px;border:none;border-radius:var(--radius);font-size:17px;font-weight:700;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:10px;transition:opacity .15s,transform .1s}
+.btn:active{transform:scale(.97);opacity:.9}
+.btn-green{background:var(--green);color:#fff}
+.btn-red{background:var(--red);color:#fff}
+.btn-yellow{background:var(--yellow);color:#fff}
+.btn-gray{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+.btn-outline{background:transparent;color:var(--green);border:2px solid var(--green)}
+.btn-sm{padding:12px;font-size:15px}
+.btn-disabled{opacity:.4;pointer-events:none}
+
+/* Timer */
+.timer-block{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center;margin-bottom:16px}
+.timer-label{font-size:12px;color:var(--gray);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.timer-display{font-size:54px;font-weight:800;color:var(--green);letter-spacing:2px;font-variant-numeric:tabular-nums}
+.timer-display.paused{color:var(--yellow)}
+.timer-os{font-size:14px;color:var(--text2);margin-top:6px}
+
+/* OS list item */
+.os-item{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;cursor:pointer;transition:border-color .15s}
+.os-item:active{border-color:var(--green)}
+.os-item.active-os{border-color:var(--green);border-width:2px}
+.os-item.paused-os{border-color:var(--yellow);border-width:2px}
+.os-id{font-size:11px;color:var(--gray);margin-bottom:4px}
+.os-cliente{font-size:16px;font-weight:700;color:var(--text)}
+.os-desc{font-size:13px;color:var(--text2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.os-badges{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.badge{font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px}
+.badge-green{background:rgba(34,181,115,.2);color:var(--green)}
+.badge-yellow{background:rgba(243,156,18,.2);color:var(--yellow)}
+.badge-red{background:rgba(231,76,60,.2);color:var(--red)}
+.badge-gray{background:var(--bg3);color:var(--gray)}
+
+/* Form inputs */
+.form-group{margin-bottom:14px}
+.form-label{font-size:13px;color:var(--gray);margin-bottom:6px;display:block;font-weight:600}
+.form-input,.form-select,.form-textarea{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:16px;padding:14px;outline:none;transition:border-color .2s}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--green)}
+.form-textarea{min-height:80px;resize:vertical;font-family:inherit}
+.form-select option{background:var(--bg3)}
+
+/* Motivo buttons */
+.motivo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.motivo-btn{background:var(--bg3);border:2px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-weight:600;padding:16px 10px;cursor:pointer;text-align:center;transition:all .15s;line-height:1.3}
+.motivo-btn:active,.motivo-btn.selected{border-color:var(--green);background:rgba(34,181,115,.1);color:var(--green)}
+.motivo-btn .motivo-icon{font-size:24px;display:block;margin-bottom:6px}
+
+/* Stats row */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.stat-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+.stat-val{font-size:22px;font-weight:800;color:var(--green)}
+.stat-lbl{font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+
+/* Progress bar */
+.progress-bar{height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin:8px 0}
+.progress-fill{height:100%;background:var(--green);border-radius:4px;transition:width .5s}
+
+/* Divider */
+.divider{height:1px;background:var(--border);margin:16px 0}
+
+/* Alert */
+.alert{background:rgba(34,181,115,.1);border:1px solid rgba(34,181,115,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--green);margin-bottom:12px;display:flex;gap:8px}
+.alert-warn{background:rgba(243,156,18,.1);border-color:rgba(243,156,18,.3);color:var(--yellow)}
+.alert-err{background:rgba(231,76,60,.1);border-color:rgba(231,76,60,.3);color:var(--red)}
+
+/* Loading overlay */
+#loading{display:none;position:fixed;inset:0;background:rgba(13,17,23,.85);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:16px}
+#loading.show{display:flex}
+.spinner{width:44px;height:44px;border:4px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-msg{color:var(--gray);font-size:14px}
+
+/* Toast */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--bg2);border:1px solid var(--green);color:var(--text);padding:12px 20px;border-radius:40px;font-size:14px;font-weight:600;z-index:1000;transition:transform .3s,opacity .3s;opacity:0;white-space:nowrap}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+#toast.err{border-color:var(--red);color:var(--red)}
+
+/* Tecnico avatar */
+.tec-btn{background:var(--bg2);border:2px solid var(--border);border-radius:var(--radius);padding:18px;display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:10px;transition:all .15s}
+.tec-btn:active,.tec-btn.selected{border-color:var(--green)}
+.tec-avatar{width:44px;height:44px;background:var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff;flex-shrink:0}
+.tec-nome{font-size:17px;font-weight:700;color:var(--text)}
+.tec-id{font-size:12px;color:var(--gray)}
+
+/* Encerrar pct slider */
+.pct-display{font-size:36px;font-weight:800;color:var(--green);text-align:center;margin:8px 0}
+input[type=range]{width:100%;height:44px;accent-color:var(--green);cursor:pointer}
+
+/* Bottom nav / fixed CTA area */
+.bottom-cta{position:fixed;bottom:0;left:0;right:0;padding:12px 16px 24px;background:linear-gradient(transparent,var(--bg) 30%)}
+
+/* Status dot */
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
+.dot-green{background:var(--green)}
+.dot-yellow{background:var(--yellow)}
+.dot-gray{background:var(--gray)}
+</style>
+</head>
+<body>
+
+<!-- &#9472;&#9472;&#9472; Loading overlay &#9472;&#9472;&#9472; -->
+<div id="loading"><div class="spinner"></div><div class="loading-msg" id="loading-msg">Aguarde...</div></div>
+<div id="toast"></div>
+
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<!-- TELA 1: LOGIN -->
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<div id="scr-login" class="screen active">
+  <div class="hdr">
+    <div style="flex:1">
+      <div class="hdr-title">&#9889; Eletrium Field</div>
+      <div class="hdr-sub">Selecione seu nome para começar</div>
+    </div>
+  </div>
+  <div class="content">
+    <div id="login-tecnicos"></div>
+    <div id="login-erro" class="alert alert-err" style="display:none">&#10060; Erro ao carregar técnicos</div>
+  </div>
+</div>
+
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<!-- TELA 2: HOME &#8212; lista de OS do dia -->
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<div id="scr-home" class="screen">
+  <div class="hdr">
+    <div style="flex:1">
+      <div class="hdr-title" id="home-titulo">Minhas OS</div>
+      <div class="hdr-sub" id="home-sub">Hoje</div>
+    </div>
+    <button class="hdr-back" onclick="irParaResumo()" title="Resumo do dia">&#128202;</button>
+    <button class="hdr-back" onclick="logOut()" title="Trocar técnico">&#128100;</button>
+  </div>
+  <div class="content">
+    <!-- Timer da OS ativa (aparece se tem OS ativa) -->
+    <div id="home-timer-block" style="display:none">
+      <div class="timer-block">
+        <div class="timer-label">&#9201; OS ATIVA</div>
+        <div class="timer-display" id="home-timer">00:00:00</div>
+        <div class="timer-os" id="home-timer-os"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+        <button class="btn btn-yellow btn-sm" onclick="irParaPausar()">&#9208; PAUSAR</button>
+        <button class="btn btn-red btn-sm" onclick="irParaEncerrar()">&#127937; ENCERRAR</button>
+      </div>
+    </div>
+
+    <!-- OS pausada (aparece se tem OS pausada) -->
+    <div id="home-pausa-block" style="display:none">
+      <div class="alert alert-warn">
+        <span>&#9208;</span>
+        <div><strong>OS pausada:</strong> <span id="home-pausa-motivo"></span><br>
+        <button onclick="irParaPausada()" style="background:none;border:none;color:var(--yellow);font-weight:700;padding:4px 0;cursor:pointer;font-size:13px">&#8594; Ver OS pausada</button></div>
+      </div>
+    </div>
+
+    <!-- Lista OS -->
+    <div id="home-os-lista">
+      <div class="card" style="text-align:center;padding:32px">
+        <div style="font-size:32px;margin-bottom:8px">&#128203;</div>
+        <div style="color:var(--gray)">Carregando ordens de serviço...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<!-- TELA 3: OS ATIVA &#8212; detalhes + ações -->
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<div id="scr-os-ativa" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-home')">&#8249;</button>
+    <div style="flex:1">
+      <div class="hdr-title" id="ativa-id"></div>
+      <div class="hdr-sub" id="ativa-cliente"></div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="timer-block">
+      <div class="timer-label">&#9201; TEMPO PRODUTIVO</div>
+      <div class="timer-display" id="ativa-timer">00:00:00</div>
+      <div class="timer-os" id="ativa-desc"></div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat-val" id="ativa-realizado">0</div>
+        <div class="stat-lbl" id="ativa-unidade">Realizado</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" id="ativa-meta">0</div>
+        <div class="stat-lbl">Meta</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" id="ativa-pct">0%</div>
+        <div class="stat-lbl">Progresso</div>
+      </div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="ativa-progress" style="width:0%"></div></div>
+
+    <div class="divider"></div>
+    <button class="btn btn-yellow" onclick="irParaPausar()">&#9208; PAUSAR OS</button>
+    <button class="btn btn-red" onclick="irParaEncerrar()">&#127937; ENCERRAR OS</button>
+    <button class="btn btn-gray btn-sm" onclick="irParaEmergencia()">&#128308; OS Emergência (mesmo cliente)</button>
+    <button class="btn btn-green" style="margin-top:8px" onclick="irParaChecklist()">&#9989; Iniciar Checklist NR-10</button>
+  </div>
+</div>
+
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<!-- TELA 4: PAUSAR &#8212; motivo da pausa -->
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<div id="scr-pausar" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-os-ativa')">&#8249;</button>
+    <div style="flex:1">
+      <div class="hdr-title">&#9208; Pausar OS</div>
+      <div class="hdr-sub" id="pausar-id"></div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="card-title" style="margin-bottom:12px">Motivo da interrupção</div>
+    <div class="motivo-grid">
+      <button class="motivo-btn" onclick="selecionarMotivo('Almoço')">
+        <span class="motivo-icon">&#127869;ï¸</span>Almoço
+      </button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Deslocamento')">
+        <span class="motivo-icon">&#128663;</span>Deslocamento
+      </button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Material')">
+        <span class="motivo-icon">&#128230;</span>Buscar material
+      </button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Técnico')">
+        <span class="motivo-icon">&#128295;</span>Problema técnico
+      </button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Cliente')">
+        <span class="motivo-icon">&#128100;</span>Aguardando cliente
+      </button>
+      <button class="motivo-btn" onclick="selecionarMotivo('OS Emergência')">
+        <span class="motivo-icon">&#128308;</span>OS Emergência
+      </button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Reunião')">
+        <span class="motivo-icon">&#128222;</span>Reunião
+      </button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Outro')">
+        <span class="motivo-icon">&#10067;</span>Outro
+      </button>
+    </div>
+
+    <div class="form-group" id="pausar-outro-grupo" style="display:none">
+      <label class="form-label">Descreva o motivo</label>
+      <input class="form-input" id="pausar-outro-texto" placeholder="Ex: Chuva forte, aguardando NF..." maxlength="100">
+    </div>
+
+    <button class="btn btn-yellow" id="btn-confirmar-pausa" onclick="confirmarPausa()" disabled style="opacity:.5">
+      &#9208; CONFIRMAR PAUSA
+    </button>
+  </div>
+</div>
+
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<!-- TELA 5: PAUSADA &#8212; OS em pausa -->
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<div id="scr-pausada" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-home')">&#8249;</button>
+    <div style="flex:1">
+      <div class="hdr-title">&#9208; OS Pausada</div>
+      <div class="hdr-sub" id="pausada-id"></div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="card">
+      <div class="card-title">Motivo da pausa</div>
+      <div class="card-value" id="pausada-motivo" style="font-size:18px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Tempo produtivo acumulado</div>
+      <div class="card-value" id="pausada-horas" style="color:var(--green)"></div>
+    </div>
+
+    <div class="divider"></div>
+    <button class="btn btn-green" onclick="confirmarRetomar()">&#9654;ï¸ RETOMAR OS</button>
+    <button class="btn btn-gray btn-sm" onclick="irParaEmergencia()">&#128308; Criar OS Emergência</button>
+    <button class="btn btn-red btn-sm" onclick="irParaEncerrar()">&#127937; Encerrar esta OS</button>
+  </div>
+</div>
+
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<!-- TELA 6: EMERGÃNCIA &#8212; criar OS de emergência -->
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<div id="scr-emergencia" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar(APP.osAtiva ? 'scr-os-ativa' : 'scr-pausada')">&#8249;</button>
+    <div style="flex:1">
+      <div class="hdr-title">&#128308; OS Emergência</div>
+      <div class="hdr-sub">Mesmo cliente &#8212; novo chamado</div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="alert alert-warn">&#9888;ï¸ A OS atual será pausada automaticamente ao criar a emergência.</div>
+
+    <div class="form-group">
+      <label class="form-label">Descrição do problema</label>
+      <textarea class="form-textarea" id="emg-desc" placeholder="Descreva o problema de emergência..." rows="4"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Local</label>
+      <input class="form-input" id="emg-local" placeholder="Ex: Sala 302, Painel principal...">
+    </div>
+
+    <button class="btn btn-red" onclick="confirmarEmergencia()">&#128308; CRIAR OS EMERGÃNCIA</button>
+    <button class="btn btn-gray btn-sm" onclick="voltar(APP.osAtiva ? 'scr-os-ativa' : 'scr-pausada')">Cancelar</button>
+  </div>
+</div>
+
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<!-- TELA 7: ENCERRAR &#8212; formulário de fechamento -->
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<div id="scr-encerrar" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar(APP.osAtiva ? 'scr-os-ativa' : 'scr-pausada')">&#8249;</button>
+    <div style="flex:1">
+      <div class="hdr-title">&#127937; Encerrar OS</div>
+      <div class="hdr-sub" id="enc-id"></div>
+    </div>
+  </div>
+  <div class="content">
+    <!-- Progresso realizado -->
+    <div class="form-group">
+      <label class="form-label">Quantidade realizada hoje</label>
+      <input class="form-input" type="number" id="enc-qtd" placeholder="0" min="0" oninput="calcularPct()">
+    </div>
+    <div class="form-group">
+      <label class="form-label">% Acumulado da OS completa</label>
+      <div class="pct-display"><span id="enc-pct-num">0</span>%</div>
+      <input type="range" id="enc-pct" min="0" max="100" value="0" oninput="document.getElementById('enc-pct-num').textContent=this.value">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray)"><span>0%</span><span>50%</span><span>100%</span></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Observações -->
+    <div class="form-group">
+      <label class="form-label">Observações do campo</label>
+      <textarea class="form-textarea" id="enc-obs" placeholder="O que foi feito, pendências, observações..."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Materiais utilizados</label>
+      <input class="form-input" id="enc-materiais" placeholder="Ex: 2m cabo 6mmÂ², 3 terminais...">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Próximo passo</label>
+      <input class="form-input" id="enc-proximo" placeholder="Ex: Aguardar entrega, agendar retorno...">
+    </div>
+
+    <!-- Não conformidade -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:14px;font-weight:700">&#9888;ï¸ Não conformidade</div>
+          <div style="font-size:12px;color:var(--gray);margin-top:2px">Reportar problema detectado</div>
+        </div>
+        <label style="position:relative;width:52px;height:28px;cursor:pointer">
+          <input type="checkbox" id="enc-nc" style="opacity:0;position:absolute">
+          <span id="enc-nc-track" style="position:absolute;inset:0;background:var(--bg3);border-radius:14px;border:1px solid var(--border);transition:.2s"></span>
+          <span id="enc-nc-thumb" style="position:absolute;top:3px;left:3px;width:22px;height:22px;background:var(--gray);border-radius:50%;transition:.2s"></span>
+        </label>
+      </div>
+    </div>
+
+    <button class="btn btn-green" onclick="confirmarEncerramento()">&#127937; CONCLUIR OS</button>
+  </div>
+</div>
+
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<!-- TELA 8: RESUMO DO DIA -->
+<!-- &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552; -->
+<div id="scr-resumo" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-home')">&#8249;</button>
+    <div style="flex:1">
+      <div class="hdr-title">&#128202; Resumo do Dia</div>
+      <div class="hdr-sub" id="resumo-sub"></div>
+    </div>
+  </div>
+  <div class="content">
+    <div id="resumo-vazio" style="display:none" class="card" style="text-align:center;padding:32px">
+      <div style="font-size:32px;margin-bottom:8px">&#128203;</div>
+      <div style="color:var(--gray)">Nenhuma OS encerrada hoje</div>
+    </div>
+    <div id="resumo-dados">
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-val" id="res-horas">0h00</div>
+          <div class="stat-lbl">Prod.</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="res-os">0</div>
+          <div class="stat-lbl">OS</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="res-pauses">0</div>
+          <div class="stat-lbl">Pausas</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Horário</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:12px;color:var(--gray)">Entrada</div>
+            <div style="font-size:22px;font-weight:800;color:var(--text)" id="res-entrada">--:--</div>
+          </div>
+          <div style="color:var(--gray);font-size:24px">&#8594;</div>
+          <div style="text-align:right">
+            <div style="font-size:12px;color:var(--gray)">Ãltima OS</div>
+            <div style="font-size:22px;font-weight:800;color:var(--text)" id="res-saida">--:--</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Clientes atendidos</div>
+        <div id="res-clientes" style="font-size:14px;color:var(--text2)"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Status do dia</div>
+        <div class="card-value" id="res-status" style="font-size:16px;color:var(--green)"></div>
+      </div>
+    </div>
+
+    <button class="btn btn-gray btn-sm" onclick="logOut()">&#128100; Trocar técnico</button>
+  </div>
+</div>
+
+<script>
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// ESTADO GLOBAL
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+const APP = {
+  tecnico: null,
+  osAtiva: null,    // {id, cliente, ...} \u2014 OS em andamento
+  osPausada: null,  // {id, cliente, ...} \u2014 OS em pausa
+  osList: [],
+  timerInterval: null,
+  timerSec: 0,
+  motivoSelecionado: null
+};
+
+// \u2500\u2500\u2500 Helpers de tela \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const tela = document.getElementById(id);
+  if (tela) { tela.classList.add('active'); window.scrollTo(0,0); }
+}
+function voltar(id) { showScreen(id); }
+
+// \u2500\u2500\u2500 Loading \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function showLoading(msg) {
+  document.getElementById('loading-msg').textContent = msg || 'Aguarde...';
+  document.getElementById('loading').classList.add('show');
+}
+function hideLoading() { document.getElementById('loading').classList.remove('show'); }
+
+// \u2500\u2500\u2500 Toast \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function toast(msg, isErr) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (isErr ? ' err' : '');
+  setTimeout(() => { el.className = ''; }, 3000);
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// PASSO 4: CRONÃMETRO COM LOCALSTORAGE
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+const LS_TIMER_KEY = 'eletrium_timer';
+
+function salvarTimerLS(osId, inicioTs, horasJaAcum, pausado) {
+  localStorage.setItem(LS_TIMER_KEY, JSON.stringify({
+    osId, inicioTs, horasJaAcum: horasJaAcum || 0, pausado: !!pausado
+  }));
+}
+function lerTimerLS() {
+  try { return JSON.parse(localStorage.getItem(LS_TIMER_KEY)) || null; }
+  catch(e) { return null; }
+}
+function limparTimerLS() { localStorage.removeItem(LS_TIMER_KEY); }
+
+function iniciarCronometro(horasJaAcum) {
+  pararCronometro();
+  const ref = Date.now();
+  const baseMs = (horasJaAcum || 0) * 3600000;
+  APP.timerSec = 0;
+
+  APP.timerInterval = setInterval(() => {
+    const elapsed = Date.now() - ref + baseMs;
+    atualizarDisplay(elapsed);
+  }, 500);
+
+  // Salvar estado no LS
+  if (APP.osAtiva) {
+    salvarTimerLS(APP.osAtiva.id, ref - baseMs, horasJaAcum || 0, false);
+  }
+}
+
+function pararCronometro() {
+  if (APP.timerInterval) { clearInterval(APP.timerInterval); APP.timerInterval = null; }
+}
+
+function atualizarDisplay(ms) {
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const str = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  const el1 = document.getElementById('home-timer');
+  const el2 = document.getElementById('ativa-timer');
+  if (el1) el1.textContent = str;
+  if (el2) el2.textContent = str;
+}
+
+function restaurarCronometroAoCarregar() {
+  const ts = lerTimerLS();
+  if (!ts) return;
+  // Verificar se a OS ainda é a mesma
+  if (APP.osAtiva && ts.osId === APP.osAtiva.id && !ts.pausado) {
+    const elapsed = Date.now() - ts.inicioTs;
+    iniciarCronometro(elapsed / 3600000);
+  }
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// LOGIN \u2014 TELA 1
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+function carregarTecnicos() {
+  showLoading('Carregando técnicos...');
+  google.script.run
+    .withSuccessHandler(renderTecnicos)
+    .withFailureHandler(errTecnicos)
+    .getTecnicos();
+}
+
+function renderTecnicos(lista) {
+  hideLoading();
+  const container = document.getElementById('login-tecnicos');
+  if (!lista || !lista.length) {
+    document.getElementById('login-erro').style.display = 'flex';
+    return;
+  }
+  container.innerHTML = '';
+  lista.forEach(tec => {
+    const iniciais = tec.nome.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
+    const el = document.createElement('div');
+    el.className = 'tec-btn';
+    el.innerHTML = `
+      <div class="tec-avatar">${iniciais}</div>
+      <div>
+        <div class="tec-nome">${tec.nome}</div>
+        <div class="tec-id">${tec.id}</div>
+      </div>
+      <span style="color:var(--gray);font-size:20px;margin-left:auto">\u203A</span>
+    `;
+    el.addEventListener('click', () => entrarComoTecnico(tec));
+    container.appendChild(el);
+  });
+}
+
+function errTecnicos(err) {
+  hideLoading();
+  document.getElementById('login-erro').style.display = 'flex';
+}
+
+function entrarComoTecnico(tec) {
+  APP.tecnico = tec;
+  localStorage.setItem('eletrium_tecnico', JSON.stringify(tec));
+  carregarHome();
+}
+
+function logOut() {
+  pararCronometro();
+  limparTimerLS();
+  APP.tecnico = null; APP.osAtiva = null; APP.osPausada = null; APP.osList = [];
+  localStorage.removeItem('eletrium_tecnico');
+  showScreen('scr-login');
+  carregarTecnicos();
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// HOME \u2014 TELA 2
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+function carregarHome() {
+  showLoading('Carregando OS...');
+  const nome = APP.tecnico ? APP.tecnico.nome.split(' ')[0] : '';
+  const hoje = new Date().toLocaleDateString('pt-BR', {weekday:'short',day:'2-digit',month:'short'});
+  document.getElementById('home-titulo').innerHTML = '\u26A1 ' + nome;
+  document.getElementById('home-sub').textContent = hoje;
+  showScreen('scr-home');
+  google.script.run
+    .withSuccessHandler(renderHome)
+    .withFailureHandler(e => { hideLoading(); toast('Erro ao carregar OS', true); })
+    .getOsDoTecnico(APP.tecnico.id);
+}
+
+function renderHome(lista) {
+  hideLoading();
+  APP.osList = lista || [];
+  APP.osAtiva = null;
+  APP.osPausada = null;
+
+  // Detectar OS ativa e pausada
+  APP.osList.forEach(os => {
+    if (os.emPausa) { APP.osPausada = os; }
+    else if (os.statusAtual === 'Em andamento' || os.status === 'Em andamento') {
+      if (!APP.osPausada || !os.emPausa) APP.osAtiva = os;
+    }
+  });
+
+  // Bloco timer
+  const timerBlock = document.getElementById('home-timer-block');
+  const pausaBlock = document.getElementById('home-pausa-block');
+  timerBlock.style.display = APP.osAtiva ? 'block' : 'none';
+  pausaBlock.style.display = APP.osPausada ? 'block' : 'none';
+
+  if (APP.osAtiva) {
+    document.getElementById('home-timer-os').textContent = APP.osAtiva.cliente + ' \u2014 ' + APP.osAtiva.id;
+    iniciarCronometro(APP.osAtiva.horasProdutivas || 0);
+    restaurarCronometroAoCarregar();
+  }
+  if (APP.osPausada) {
+    document.getElementById('home-pausa-motivo').textContent = APP.osPausada.motivoPausa || 'Pausada';
+  }
+
+  // Lista OS
+  const el = document.getElementById('home-os-lista');
+  if (!lista || !lista.length) {
+    el.innerHTML = `<div class="card" style="text-align:center;padding:32px">
+      <div style="font-size:40px;margin-bottom:8px">\uD83D\uDCCB</div>
+      <div style="color:var(--gray);margin-bottom:4px">Nenhuma OS para hoje</div>
+      <div style="font-size:12px;color:var(--gray)">Verifique com o supervisor</div>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = '';
+  APP.osList.forEach(os => {
+    const isAtiva = os.statusAtual === 'Em andamento' && !os.emPausa;
+    const isPausada = os.emPausa;
+    const div = document.createElement('div');
+    div.className = 'os-item' + (isAtiva ? ' active-os' : isPausada ? ' paused-os' : '');
+    const statusBadge = isAtiva
+      ? '<span class="badge badge-green">\u25B6 ATIVA</span>'
+      : isPausada
+      ? '<span class="badge badge-yellow">\u23F8 PAUSADA</span>'
+      : '<span class="badge badge-gray">Pendente</span>';
+    const priBadge = os.prioridade && os.prioridade.includes('Emergência')
+      ? '<span class="badge badge-red">\uD83D\uDD34 EMG</span>' : '';
+    div.innerHTML = `
+      <div class="os-id">${os.id}</div>
+      <div class="os-cliente">${os.cliente || 'Cliente'}</div>
+      <div class="os-desc">${os.descricao || ''}</div>
+      <div class="os-badges">${statusBadge}${priBadge}
+        ${os.horaInicio ? '<span class="badge badge-gray">\u23F1 '+os.horaInicio+'</span>' : ''}
+        ${os.metaDia > 0 ? '<span class="badge badge-gray">Meta: '+os.qtdRealizada+'/'+os.metaDia+' '+os.unidadeMeta+'</span>' : ''}
+      </div>
+    `;
+    div.addEventListener('click', () => abrirOS(os));
+    el.appendChild(div);
+  });
+}
+
+function abrirOS(os) {
+  if (os.emPausa) { APP.osPausada = os; irParaPausada(); return; }
+  if (os.statusAtual === 'Em andamento' && !os.emPausa) {
+    APP.osAtiva = os; irParaOsAtiva(); return;
+  }
+  // OS pendente \u2014 iniciar
+  if (!APP.osAtiva && !APP.osPausada) {
+    confirmarIniciarOS(os);
+  } else {
+    toast('Encerre ou pause a OS ativa primeiro', true);
+  }
+}
+
+function confirmarIniciarOS(os) {
+  if (!confirm('Iniciar OS ' + os.id + ' para ' + os.cliente + '?')) return;
+  showLoading('Iniciando OS...');
+  google.script.run
+    .withSuccessHandler(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      APP.osAtiva = os;
+      os.horaInicio = res.hora;
+      os.statusAtual = 'Em andamento';
+      toast('\u2705 OS iniciada Ã s ' + res.hora);
+      carregarHome();
+    })
+    .withFailureHandler(e => { hideLoading(); toast('Erro ao iniciar OS', true); })
+    .iniciarOS(os.id, APP.tecnico.id, APP.tecnico.nome, '');
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// OS ATIVA \u2014 TELA 3
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+function irParaOsAtiva() {
+  if (!APP.osAtiva) return;
+  const os = APP.osAtiva;
+  document.getElementById('ativa-id').textContent = os.id;
+  document.getElementById('ativa-cliente').textContent = os.cliente || '';
+  document.getElementById('ativa-desc').textContent = os.descricao || '';
+  document.getElementById('ativa-realizado').textContent = os.qtdRealizada || 0;
+  document.getElementById('ativa-meta').textContent = os.metaDia || 0;
+  document.getElementById('ativa-unidade').textContent = os.unidadeMeta || 'Realizado';
+  const pct = os.pctAcumulado || 0;
+  document.getElementById('ativa-pct').textContent = pct + '%';
+  document.getElementById('ativa-progress').style.width = pct + '%';
+  showScreen('scr-os-ativa');
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// PAUSAR \u2014 TELA 4
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+function irParaPausar() {
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  document.getElementById('pausar-id').textContent = os.id + ' \u2014 ' + os.cliente;
+  APP.motivoSelecionado = null;
+  document.querySelectorAll('.motivo-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('pausar-outro-grupo').style.display = 'none';
+  document.getElementById('btn-confirmar-pausa').disabled = true;
+  document.getElementById('btn-confirmar-pausa').style.opacity = '.5';
+  showScreen('scr-pausar');
+}
+
+function selecionarMotivo(motivo) {
+  APP.motivoSelecionado = motivo;
+  document.querySelectorAll('.motivo-btn').forEach(b => {
+    b.classList.toggle('selected', b.textContent.trim().endsWith(motivo) || b.onclick.toString().includes("'"+motivo+"'"));
+  });
+  document.getElementById('pausar-outro-grupo').style.display = motivo === 'Outro' ? 'block' : 'none';
+  const btn = document.getElementById('btn-confirmar-pausa');
+  btn.disabled = false; btn.style.opacity = '1';
+}
+
+function confirmarPausa() {
+  let motivo = APP.motivoSelecionado;
+  if (motivo === 'Outro') {
+    const txt = document.getElementById('pausar-outro-texto').value.trim();
+    if (!txt) { toast('Descreva o motivo', true); return; }
+    motivo = txt;
+  }
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+
+  showLoading('Pausando OS...');
+  pararCronometro();
+  salvarTimerLS(os.id, null, 0, true);
+
+  google.script.run
+    .withSuccessHandler(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      APP.osPausada = { ...os, emPausa: true, motivoPausa: motivo, horasProdutivas: res.horasAcumuladas };
+      APP.osAtiva = null;
+      toast('\u23F8 Pausada \u2014 ' + res.horasAcumuladas + ' produtivos');
+      irParaPausada();
+    })
+    .withFailureHandler(e => { hideLoading(); toast('Erro ao pausar', true); })
+    .pausarOS(os.id, APP.tecnico.id, APP.tecnico.nome, motivo, '');
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// PAUSADA \u2014 TELA 5
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+function irParaPausada() {
+  if (!APP.osPausada) return;
+  const os = APP.osPausada;
+  document.getElementById('pausada-id').textContent = os.id + ' \u2014 ' + os.cliente;
+  document.getElementById('pausada-motivo').textContent = os.motivoPausa || 'Pausada';
+  document.getElementById('pausada-horas').textContent = os.horasProdFormatadas || os.horasProdutivas || '0h00';
+  showScreen('scr-pausada');
+}
+
+function confirmarRetomar() {
+  if (!APP.osPausada) return;
+  const os = APP.osPausada;
+  showLoading('Retomando OS...');
+  google.script.run
+    .withSuccessHandler(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      APP.osAtiva = { ...os, emPausa: false, statusAtual: 'Em andamento' };
+      APP.osPausada = null;
+      toast('\u25B6ï¸ OS retomada Ã s ' + res.hora);
+      iniciarCronometro(0); // reinicia timer (horas já estão salvas na planilha)
+      irParaOsAtiva();
+    })
+    .withFailureHandler(e => { hideLoading(); toast('Erro ao retomar', true); })
+    .retomarOS(os.id, APP.tecnico.id, APP.tecnico.nome);
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// EMERGÃNCIA \u2014 TELA 6
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+function irParaEmergencia() {
+  document.getElementById('emg-desc').value = '';
+  document.getElementById('emg-local').value = '';
+  showScreen('scr-emergencia');
+}
+
+function confirmarEmergencia() {
+  const desc = document.getElementById('emg-desc').value.trim();
+  const local = document.getElementById('emg-local').value.trim();
+  if (!desc) { toast('Descreva o problema', true); return; }
+
+  const osOrigem = APP.osAtiva || APP.osPausada;
+  const dados = {
+    descricao: desc, local: local,
+    tecnicoId: APP.tecnico.id, tecnicoNome: APP.tecnico.nome,
+    clienteId: osOrigem ? osOrigem.clienteId || '' : '',
+    clienteNome: osOrigem ? osOrigem.cliente : '',
+    osOrigemId: osOrigem ? osOrigem.id : ''
+  };
+
+  showLoading('Criando OS emergência...');
+  pararCronometro();
+
+  // Se há OS ativa, pausar primeiro
+  const pausarPrimeiro = !!APP.osAtiva;
+  const criar = () => {
+    google.script.run
+      .withSuccessHandler(res => {
+        hideLoading();
+        if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+        const novaOS = { id: res.osId, cliente: dados.clienteNome, descricao: desc,
+                         statusAtual: 'Em andamento', emPausa: false, horasProdutivas: 0,
+                         horaInicio: res.hora, prioridade: '\uD83D\uDD34 Emergência' };
+        if (pausarPrimeiro && APP.osAtiva) APP.osPausada = { ...APP.osAtiva, emPausa: true, motivoPausa: 'OS Emergência' };
+        APP.osAtiva = novaOS;
+        toast('\uD83D\uDD34 OS ' + res.osId + ' criada');
+        iniciarCronometro(0);
+        irParaOsAtiva();
+      })
+      .withFailureHandler(e => { hideLoading(); toast('Erro ao criar emergência', true); })
+      .criarOSEmergencia(dados);
+  };
+
+  if (pausarPrimeiro && APP.osAtiva) {
+    google.script.run
+      .withSuccessHandler(() => { APP.osPausada = {...APP.osAtiva, emPausa:true, motivoPausa:'OS Emergência'}; APP.osAtiva = null; criar(); })
+      .withFailureHandler(() => criar())
+      .pausarOS(APP.osAtiva.id, APP.tecnico.id, APP.tecnico.nome, 'OS Emergência', '');
+  } else { criar(); }
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// ENCERRAR \u2014 TELA 7
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+function irParaEncerrar() {
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  document.getElementById('enc-id').textContent = os.id + ' \u2014 ' + os.cliente;
+  document.getElementById('enc-qtd').value = os.qtdRealizada || '';
+  document.getElementById('enc-pct').value = os.pctAcumulado || 0;
+  document.getElementById('enc-pct-num').textContent = os.pctAcumulado || 0;
+  document.getElementById('enc-obs').value = '';
+  document.getElementById('enc-materiais').value = '';
+  document.getElementById('enc-proximo').value = '';
+  document.getElementById('enc-nc').checked = false;
+  // Toggle visual
+  const nc = document.getElementById('enc-nc');
+  const track = document.getElementById('enc-nc-track');
+  const thumb = document.getElementById('enc-nc-thumb');
+  nc.addEventListener('change', () => {
+    track.style.background = nc.checked ? 'var(--green)' : 'var(--bg3)';
+    thumb.style.background = nc.checked ? '#fff' : 'var(--gray)';
+    thumb.style.transform = nc.checked ? 'translateX(24px)' : '';
+  });
+  showScreen('scr-encerrar');
+}
+
+function calcularPct() {
+  const qtd = parseInt(document.getElementById('enc-qtd').value) || 0;
+  const os = APP.osAtiva || APP.osPausada;
+  if (os && os.metaDia > 0) {
+    const pct = Math.min(100, Math.round((qtd / os.metaDia) * 100));
+    document.getElementById('enc-pct').value = pct;
+    document.getElementById('enc-pct-num').textContent = pct;
+  }
+}
+
+function confirmarEncerramento() {
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  const qtd = parseInt(document.getElementById('enc-qtd').value) || 0;
+  const pct = parseInt(document.getElementById('enc-pct').value) || 0;
+  const dadosEnc = {
+    qtdRealizada: qtd,
+    pctAcumulado: pct,
+    observacoes: document.getElementById('enc-obs').value.trim(),
+    materiais: document.getElementById('enc-materiais').value.trim(),
+    ocorrencias: '',
+    proximoPasso: document.getElementById('enc-proximo').value.trim(),
+    fotosURL: '',
+    naoConformidade: document.getElementById('enc-nc').checked
+  };
+  showLoading('Encerrando OS...');
+  pararCronometro();
+  limparTimerLS();
+  google.script.run
+    .withSuccessHandler(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      toast('\uD83C\uDFC1 OS encerrada! ' + res.horasFinais + ' produtivos');
+      APP.osAtiva = null; APP.osPausada = null;
+      carregarHome();
+    })
+    .withFailureHandler(e => { hideLoading(); toast('Erro ao encerrar', true); })
+    .encerrarOS(os.id, APP.tecnico.id, APP.tecnico.nome, dadosEnc);
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// RESUMO \u2014 TELA 8
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+function irParaResumo() {
+  showScreen('scr-resumo');
+  const hoje = new Date().toLocaleDateString('pt-BR', {weekday:'long',day:'2-digit',month:'long'});
+  document.getElementById('resumo-sub').textContent = hoje;
+  showLoading('Carregando resumo...');
+  google.script.run
+    .withSuccessHandler(renderResumo)
+    .withFailureHandler(() => { hideLoading(); toast('Erro ao carregar resumo', true); })
+    .getDiariaTecnico(APP.tecnico.id);
+}
+
+function renderResumo(diaria) {
+  hideLoading();
+  if (!diaria) {
+    document.getElementById('resumo-vazio').style.display = 'block';
+    document.getElementById('resumo-dados').style.display = 'none';
+    return;
+  }
+  document.getElementById('resumo-vazio').style.display = 'none';
+  document.getElementById('resumo-dados').style.display = 'block';
+  document.getElementById('res-horas').textContent = diaria.horasProdFormatadas || '0h00';
+  document.getElementById('res-os').textContent = diaria.qtdOS || 0;
+  document.getElementById('res-pauses').textContent = diaria.qtdInterrupcoes || 0;
+  document.getElementById('res-entrada').textContent = diaria.horaEntrada || '--:--';
+  document.getElementById('res-saida').textContent = diaria.horaSaida || '--:--';
+  document.getElementById('res-clientes').textContent = diaria.clientes || 'Nenhum cliente registrado';
+  document.getElementById('res-status').textContent = diaria.statusDia || 'Em campo';
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// INICIALIZAÃÃO
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// ═══════════════════════════════════════════════════════════════════════
+// CHECKLIST NR-10 — TELA 9
+// ═══════════════════════════════════════════════════════════════════════
+
+// Estado do checklist
+const CK = {
+  disciplina: 'NR-10',
+  perguntaAtualId: null,
+  respostas: [],          // [{perguntaId, textoPergunta, resposta, geraNC}]
+  qtdPerguntas: 0         // contador para exibir "Pergunta X"
+};
+
+function irParaChecklist() {
+  if (!APP.osAtiva) { toast('Nenhuma OS ativa', true); return; }
+  CK.disciplina = 'NR-10';
+  CK.perguntaAtualId = null;
+  CK.respostas = [];
+  CK.qtdPerguntas = 0;
+  showScreen('scr-checklist');
+  carregarProximaPergunta(null, null);
+}
+
+function voltarDoChecklist() {
+  showScreen('scr-os-ativa');
+}
+
+function carregarProximaPergunta(perguntaAtualId, respostaDada) {
+  showLoading('Carregando pergunta...');
+  google.script.run
+    .withSuccessHandler(renderPergunta)
+    .withFailureHandler(e => { hideLoading(); toast('Erro ao carregar pergunta', true); })
+    .getProximaPergunta(CK.disciplina, perguntaAtualId, respostaDada);
+}
+
+function renderPergunta(pergunta) {
+  hideLoading();
+  if (!pergunta) {
+    renderResumoChecklist();
+    return;
+  }
+  CK.perguntaAtualId = pergunta.ID_Pergunta;
+  CK.qtdPerguntas++;
+  document.getElementById('ck-progresso').textContent = 'Pergunta ' + CK.qtdPerguntas;
+
+  const content = document.getElementById('ck-content');
+  const tipo = pergunta.Tipo_Resposta || 'Unica';
+  const opcoes = pergunta.opcoes || [];
+  const fotoObrig = pergunta.Foto_Obrigatoria === true || pergunta.Foto_Obrigatoria === 'TRUE';
+
+  let html = '<div style="padding:8px 0 16px"><h3 style="font-size:17px;line-height:1.4;margin-bottom:20px">' + pergunta.Texto_Pergunta + '</h3>';
+
+  if (tipo === 'Unica') {
+    html += opcoes.map(op =>
+      '<button class="btn btn-green" style="margin-bottom:10px;text-align:left" onclick="responderUnica(this,' +
+      JSON.stringify(op.Texto_Opcao) + ',' + JSON.stringify(op.Aciona_NC || false) + ')">' +
+      op.Texto_Opcao + '</button>'
+    ).join('');
+  } else if (tipo === 'Multipla') {
+    html += opcoes.map((op, i) =>
+      '<label style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg2);border-radius:8px;margin-bottom:8px">' +
+      '<input type="checkbox" id="ck_op_' + i + '" value="' + op.Texto_Opcao + '" style="width:18px;height:18px">' +
+      '<span>' + op.Texto_Opcao + '</span></label>'
+    ).join('');
+    html += '<button class="btn btn-green" style="margin-top:8px" onclick="responderMultipla()">Confirmar</button>';
+  } else if (tipo === 'Matriz_Risco') {
+    html += '<p style="color:var(--text2);margin-bottom:12px">Selecione Severidade x Criticidade:</p>';
+    const severidades = ['Baixa','Media','Alta'];
+    const criticidades = ['Baixa','Media','Alta'];
+    html += '<table style="width:100%;border-collapse:collapse">';
+    html += '<tr><th></th>' + criticidades.map(c => '<th style="padding:6px;font-size:12px">' + c + '</th>').join('') + '</tr>';
+    severidades.forEach(s => {
+      html += '<tr><td style="padding:6px;font-size:12px;font-weight:bold">' + s + '</td>';
+      criticidades.forEach(cr => {
+        const val = s + 'x' + cr;
+        html += '<td style="padding:4px"><button class="btn btn-gray btn-sm" style="width:100%;font-size:11px" onclick="responderMatriz(' + JSON.stringify(val) + ')">' + s[0] + 'x' + cr[0] + '</button></td>';
+      });
+      html += '</tr>';
+    });
+    html += '</table>';
+  }
+
+  html += '</div>';
+  content.innerHTML = html;
+  CK._fotoObrig = fotoObrig;
+}
+
+function responderUnica(btn, opcao, geraNC) {
+  btn.style.opacity = '0.5';
+  salvarRespostaLocal(opcao, geraNC, function() {
+    carregarProximaPergunta(CK.perguntaAtualId, opcao);
+  });
+}
+
+function responderMultipla() {
+  const checks = document.querySelectorAll('#ck-content input[type=checkbox]:checked');
+  if (checks.length === 0) { toast('Selecione ao menos uma opcao', true); return; }
+  const opcao = Array.from(checks).map(c => c.value).join(', ');
+  salvarRespostaLocal(opcao, false, function() {
+    carregarProximaPergunta(CK.perguntaAtualId, opcao);
+  });
+}
+
+function responderMatriz(opcao) {
+  salvarRespostaLocal(opcao, false, function() {
+    carregarProximaPergunta(CK.perguntaAtualId, opcao);
+  });
+}
+
+function salvarRespostaLocal(resposta, geraNC, callback) {
+  const os = APP.osAtiva;
+  const pergAtual = CK.perguntaAtualId;
+  CK.respostas.push({ perguntaId: pergAtual, resposta: resposta, geraNC: geraNC });
+  showLoading('Salvando...');
+  google.script.run
+    .withSuccessHandler(() => { hideLoading(); callback(); })
+    .withFailureHandler(e => { hideLoading(); toast('Erro ao salvar', true); callback(); })
+    .salvarResposta(
+      os.id, os.idSharePoint, pergAtual,
+      document.querySelector('#ck-content h3') ? document.querySelector('#ck-content h3').textContent : '',
+      resposta, '', APP.tecnico.nome, geraNC
+    );
+}
+
+function renderResumoChecklist() {
+  showScreen('scr-ck-resumo');
+  let html = '';
+  CK.respostas.forEach((r, i) => {
+    const cor = r.geraNC ? 'var(--red)' : 'var(--green)';
+    html += '<div style="padding:10px;border-left:3px solid ' + cor + ';margin-bottom:10px;background:var(--bg2);border-radius:0 8px 8px 0">';
+    html += '<div style="font-size:12px;color:var(--text2)">Pergunta ' + (i+1) + '</div>';
+    html += '<div style="font-weight:bold;margin:4px 0">' + r.resposta + '</div>';
+    if (r.geraNC) html += '<div style="font-size:11px;color:var(--red)">&#9888; Gera Nao Conformidade</div>';
+    html += '</div>';
+  });
+  if (!html) html = '<p style="color:var(--text2)">Nenhuma resposta registrada.</p>';
+  document.getElementById('ck-resumo-lista').innerHTML = html;
+}
+
+function concluirChecklist() {
+  showScreen('scr-os-ativa');
+  toast('Checklist NR-10 concluido!');
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  // Tentar restaurar técnico do localStorage
+  const tecLS = localStorage.getItem('eletrium_tecnico');
+  if (tecLS) {
+    try {
+      APP.tecnico = JSON.parse(tecLS);
+      carregarHome();
+      return;
+    } catch(e) {}
+  }
+  carregarTecnicos();
+});
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- TELA 9: CHECKLIST NR-10 - Formulario dinamico em cascata          -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="scr-checklist" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltarDoChecklist()">&#8249;</button>
+    <div style="flex:1">
+      <div class="hdr-title">&#9989; Checklist NR-10</div>
+      <div class="hdr-sub" id="ck-progresso">Pergunta 1</div>
+    </div>
+  </div>
+  <div class="content" id="ck-content">
+    <!-- Preenchido dinamicamente por renderPergunta() -->
+  </div>
+</div>
+
+<!-- TELA 10: RESUMO DO CHECKLIST -->
+<div id="scr-ck-resumo" class="screen">
+  <div class="hdr">
+    <div style="flex:1">
+      <div class="hdr-title">&#128203; Resumo do Checklist</div>
+      <div class="hdr-sub">NR-10</div>
+    </div>
+  </div>
+  <div class="content">
+    <div id="ck-resumo-lista" style="margin-bottom:24px"></div>
+    <button class="btn btn-green" onclick="concluirChecklist()">&#127937; Concluir e Voltar a OS</button>
+  </div>
+</div>
+
+</body>
+</html>
