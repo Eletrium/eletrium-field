@@ -53,7 +53,12 @@ function setupSheets() {
       // admin (OS_Equipe) e por membro de equipe; o PWA hoje só rastreia
       // 1 técnico por OS (sem conceito de equipe), então os campos vivem
       // direto na linha da OS — ver comentário em salvarSelfieEPI.
-      'Selfie_URL', 'EPI_Checklist_OK', 'EPI_Checklist_JSON', 'Diario_Tecnico', 'Diario_Preenchido'
+      'Selfie_URL', 'EPI_Checklist_OK', 'EPI_Checklist_JSON', 'Diario_Tecnico', 'Diario_Preenchido',
+      // Checklist 3 fases (CONTRATO-BACKEND-CHECKLIST-3-FASES.md, sessao
+      // de frontend) — sinal de que a Fase 2 (Execucao) foi fechada de
+      // verdade no servidor. Escrito por fecharFaseChecklist(), lido como
+      // 5o motivo de bloqueio em canCloseOS.
+      'Checklist_Execucao_Completo'
     ];
     novos.forEach(campo => {
       if (!existingHeaders.includes(campo)) {
@@ -90,6 +95,22 @@ function setupSheets() {
       if (!tecHeaders.includes(campo)) {
         const nextCol = tecSheet.getLastColumn() + 1;
         tecSheet.getRange(1, nextCol).setValue(campo);
+      }
+    });
+  }
+
+  // Checklist 3 fases (CONTRATO-BACKEND-CHECKLIST-3-FASES.md) -- sem
+  // estas 2 colunas nao ha como o servidor saber quais perguntas
+  // pertencem a qual fase nem quais sao obrigatorias pra fechar a fase.
+  // Schema original de Perguntas_Checklist (initChecklistSheets(),
+  // Checklist.js) nao tem nenhuma das duas.
+  const pergSheet = ss.getSheetByName('Perguntas_Checklist');
+  if (pergSheet) {
+    const pergHeaders = pergSheet.getRange(1, 1, 1, pergSheet.getLastColumn()).getValues()[0];
+    ['Fase_Execucao', 'Obrigatoria'].forEach(campo => {
+      if (!pergHeaders.includes(campo)) {
+        const nextCol = pergSheet.getLastColumn() + 1;
+        pergSheet.getRange(1, nextCol).setValue(campo);
       }
     });
   }
@@ -352,12 +373,20 @@ function _pastaEvidenciasOS() {
   return existentes.hasNext() ? existentes.next() : raiz.createFolder(NOME_PASTA);
 }
 
-const CAMPOS_ARQUIVO_PERMITIDOS = ['Laudo_URL', 'Assinatura_URL'];
+// KM_Foto_Desvio_URL liberado 12/08 -- contrato da sessao de frontend
+// (CONTRATO-BACKEND-FOTO-DESVIO-KM.md): a coluna ja era escrita por
+// validarESalvarKMInicial/registrarKMFinalPendente, so faltava essa
+// allow-list pra salvarArquivoOS aceitar o upload real da foto de
+// desvio (antes disso, o desvio ficava permanentemente travado sem
+// app-side nenhum jeito de cumprir a exigencia de foto).
+const CAMPOS_ARQUIVO_PERMITIDOS = ['Laudo_URL', 'Assinatura_URL', 'KM_Foto_Desvio_URL'];
 
 function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArquivo, operationId, dispositivoId) {
   if (CAMPOS_ARQUIVO_PERMITIDOS.indexOf(campo) < 0) {
     return { sucesso: false, erro: 'Campo nao permitido: ' + campo };
   }
+  const posse = verificarPosseOS(osId, tecnicoId);
+  if (!posse.ok) return { sucesso: false, erro: posse.erro };
   // tipo_operacao pro Log_Central (lista fechada aprovada Geovane/Cowork
   // 2, 12/08): Assinatura_URL bate exato com ASSINATURA. Laudo_URL nao
   // tem categoria propria na lista aprovada -- aproximado pra UPLOAD_FOTO
@@ -401,6 +430,8 @@ function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArqui
 const CONFIRMACOES_SEGURANCA_MIN = ['epi', 'aterramento', 'bloqueio_energia', 'sinalizacao_area'];
 
 function confirmarSegurancaPreExecucao(osId, tecnicoId, confirmacoes, temNaoConformidade, operationId, dispositivoId) {
+  const posse = verificarPosseOS(osId, tecnicoId);
+  if (!posse.ok) return { sucesso: false, erro: posse.erro };
   // tipo_operacao pro Log_Central: a lista fechada aprovada (Geovane/
   // Cowork 2, 12/08) nao tem categoria propria pra "confirmacao de
   // seguranca" -- aproximado pra CHECKLIST_RESPOSTA (o mais proximo
@@ -449,6 +480,8 @@ function confirmarSegurancaPreExecucao(osId, tecnicoId, confirmacoes, temNaoConf
 const EPI_ITENS_MIN = ['capacete', 'luvas_isolantes', 'oculos_protecao', 'calcado_seguranca', 'cinto_seguranca'];
 
 function salvarSelfieEPI(osId, tecnicoId, base64Selfie, mimeType, epiChecklist, diarioTexto, operationId, dispositivoId) {
+  const posse = verificarPosseOS(osId, tecnicoId);
+  if (!posse.ok) return { sucesso: false, erro: posse.erro };
   // tipo_operacao pro Log_Central: sem categoria propria "selfie" na
   // lista aprovada -- aproximado pra UPLOAD_FOTO (a selfie e uma foto;
   // EPI/diario sao dados secundarios na mesma chamada). Sinalizado, nao
@@ -553,6 +586,35 @@ function encontrarLinha(sheet, valor, colIndex) {
     if (String(dados[i][colIndex]) === String(valor)) return i + 1;
   }
   return null;
+}
+
+// ─── verificarPosseOS — Frente E, Opcao C (Diretriz v1.1) ────────
+// Checagem de posse: confere que o tecnicoId que esta chamando e o
+// mesmo atribuido a OS (Ordens_Servico.ID_Tecnico) antes de aceitar
+// uma escrita critica. Camada barata (ver docs/DESENHO-FRENTE-E-
+// AUTH-DISPATCHER.md, Opcao C) -- fecha o pior caso concreto
+// (adulterar a OS de OUTRO tecnico), mas nao exige ter passado pelo
+// PIN nem impede alguem que ja SABE o Tecnico_ID de outro tecnico de
+// agir como ele. A correcao real (token de sessao assinado, Opcao A)
+// fica pra depois, com decisao separada. Fail-open SO quando a coluna
+// ID_Tecnico nao existe (planilha ainda sem o schema, mesmo padrao
+// usado em canCloseOS) -- nunca quando ela existe mas esta vazia ou
+// diferente do tecnicoId recebido.
+function verificarPosseOS(osId, tecnicoId) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const osSheet = ss.getSheetByName('Ordens_Servico');
+  if (!osSheet) return { ok: false, erro: 'OS nao encontrada: ' + osId };
+  const osRow = encontrarLinha(osSheet, osId, 0);
+  if (!osRow) return { ok: false, erro: 'OS nao encontrada: ' + osId };
+
+  const colTec = getCol('ID_Tecnico');
+  if (!colTec) return { ok: true };
+
+  const tecnicoDaOS = String(osSheet.getRange(osRow, colTec).getValue() || '').trim();
+  if (tecnicoDaOS !== String(tecnicoId || '').trim()) {
+    return { ok: false, erro: 'Tecnico ' + tecnicoId + ' nao tem posse da OS ' + osId };
+  }
+  return { ok: true };
 }
 
 // ─── encontrarOuCriarLinhaDiaria ──────────────────────────────────
@@ -922,6 +984,9 @@ function registrarUsoVeiculo(tecnicoId, usaVeiculo) {
 
 // ─── iniciarOS ───────────────────────────────────────────────────
 function iniciarOS(osId, tecnicoId, tecnicoNome, local) {
+  const posse = verificarPosseOS(osId, tecnicoId);
+  if (!posse.ok) return { erro: posse.erro };
+
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const now = new Date();
   const osSheet = ss.getSheetByName('Ordens_Servico');
@@ -1136,6 +1201,17 @@ function canCloseOS(osId, dadosPendentes) {
     }
   }
 
+  // 5o motivo (CONTRATO-BACKEND-CHECKLIST-3-FASES.md, item 3) -- exige
+  // que a Fase 2 (Execucao) do checklist tenha sido fechada de verdade
+  // via fecharFaseChecklist(), nao so a Fase 1 (Estado_Seguranca acima).
+  // Fail-closed no mesmo padrao dos outros 4: sem a coluna, bloqueia
+  // com motivo de lacuna de funcionalidade, nao erro do tecnico.
+  if (!colExiste('Checklist_Execucao_Completo')) {
+    reasons.push('checklist de execucao completo (Checklist_Execucao_Completo) - coluna ainda nao existe na planilha do PWA; checklist em 3 fases e escopo da Frente B');
+  } else if (ler('Checklist_Execucao_Completo') !== true) {
+    reasons.push('checklist de execucao completo (Checklist_Execucao_Completo) - fase de execucao ainda nao foi fechada');
+  }
+
   const statusAtual = ler('Status');
   if (statusAtual === 'Concluída' || statusAtual === 'Cancelada') {
     reasons.push('OS ja esta "' + statusAtual + '" - conclusao ja ocorreu ou foi cancelada');
@@ -1146,6 +1222,9 @@ function canCloseOS(osId, dadosPendentes) {
 
 // ─── encerrarOS ──────────────────────────────────────────────────
 function encerrarOS(osId, tecnicoId, tecnicoNome, dadosEnc) {
+  const posse = verificarPosseOS(osId, tecnicoId);
+  if (!posse.ok) return { sucesso: false, erro: posse.erro };
+
   const check = canCloseOS(osId, { fotosURL: dadosEnc.fotosURL || '' });
   if (!check.allowed) {
     return { sucesso: false, erro: 'OS nao pode ser concluida ainda', blockingReasons: check.blockingReasons };
@@ -1454,6 +1533,127 @@ function salvarResposta(osId, idSharePointOS, perguntaId, textoPergunta,
   ]);
   return { sucesso: true };
   });
+}
+
+// ─── fecharFaseChecklist — Checklist 3 fases (Diretriz v1.1) ────────
+// Contrato da sessao de frontend (CONTRATO-BACKEND-CHECKLIST-3-FASES.md):
+// hoje a sequencia Pre-Execucao -> Execucao -> Pos-Execucao e 100%
+// aplicada no cliente (localStorage) -- nada no servidor impede concluir
+// uma OS sem nunca ter aberto a Fase 2. Esta funcao fecha essa lacuna:
+// confere que toda pergunta ATIVA+OBRIGATORIA da fase tem resposta
+// gravada em Checklist_Respostas para esta OS e, se completa, grava o
+// efeito colateral real da fase.
+//
+// Fase "Pre-Execucao": grava Estado_Seguranca (Bloqueado se alguma
+// resposta das perguntas desta fase tiver Gerou_NC=true, senao
+// Liberado) -- isto SUBSTITUI confirmarSegurancaPreExecucao como
+// escritor real da coluna, exatamente como o comentario da versao
+// interim ja anunciava.
+// Fase "Execucao": grava Checklist_Execucao_Completo=true, que
+// canCloseOS passa a exigir (5o motivo de bloqueio).
+// Fase "Pos-Execucao": sem efeito colateral proprio na planilha do PWA
+// -- o fechamento real da OS continua passando pelos 4 requisitos ja
+// existentes de canCloseOS (Laudo/Assinatura/Fotos/Estado_Seguranca).
+// Esta chamada so confirma que a fase foi percorrida por completo.
+//
+// Mesma checagem de posse (Frente E, Opcao C) aplicada as outras
+// escritas criticas -- esta e uma escrita nova, nao ficaria de fora.
+const FASES_CHECKLIST_VALIDAS = ['Pré-Execução', 'Execução', 'Pós-Execução'];
+
+function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) {
+  const posse = verificarPosseOS(osId, tecnicoId);
+  if (!posse.ok) return { sucesso: false, erro: posse.erro };
+
+  if (FASES_CHECKLIST_VALIDAS.indexOf(fase) < 0) {
+    return { sucesso: false, erro: 'Fase invalida: ' + fase };
+  }
+
+  return executarIdempotente(operationId, 'CHECKLIST_RESPOSTA', osId, tecnicoId, dispositivoId, () => {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const osSheet = ss.getSheetByName('Ordens_Servico');
+    const osRow = encontrarLinha(osSheet, osId, 0);
+    if (!osRow) return { sucesso: false, erro: 'OS nao encontrada: ' + osId };
+
+    const pergSheet = ss.getSheetByName('Perguntas_Checklist');
+    if (!pergSheet) return { sucesso: false, erro: 'Aba Perguntas_Checklist nao encontrada' };
+    const pDados = pergSheet.getDataRange().getValues();
+    const pH = pDados[0];
+    const idxFase = pH.indexOf('Fase_Execucao');
+    const idxObrig = pH.indexOf('Obrigatoria');
+    const idxAtivo = pH.indexOf('Ativo');
+    const idxIdPerg = pH.indexOf('ID_Pergunta');
+    if (idxFase < 0 || idxObrig < 0) {
+      return { sucesso: false, erro: 'Colunas Fase_Execucao/Obrigatoria nao existem na planilha (rode rodarSetupSheets)' };
+    }
+
+    const ehVerdadeiro = (v) => v === true || v === 'TRUE' || v === 'true';
+    const perguntasDaFase = pDados.slice(1)
+      .filter(row => row[idxFase] === fase && ehVerdadeiro(row[idxAtivo]))
+      .map(row => row[idxIdPerg]);
+    const obrigatoriasDaFase = pDados.slice(1)
+      .filter(row => row[idxFase] === fase && ehVerdadeiro(row[idxAtivo]) && ehVerdadeiro(row[idxObrig]))
+      .map(row => row[idxIdPerg]);
+
+    const respSheet = ss.getSheetByName('Checklist_Respostas');
+    if (!respSheet) return { sucesso: false, erro: 'Aba Checklist_Respostas nao encontrada' };
+    const rDados = respSheet.getDataRange().getValues();
+    const rH = rDados[0];
+    const idxROS = rH.indexOf('ID_OS');
+    const idxRPerg = rH.indexOf('Pergunta_ID');
+    const idxRNC = rH.indexOf('Gerou_NC');
+    const respostasDaOS = rDados.slice(1).filter(row => String(row[idxROS]) === String(osId));
+    const idsRespondidos = respostasDaOS.map(row => row[idxRPerg]);
+
+    const faltando = obrigatoriasDaFase.filter(id => idsRespondidos.indexOf(id) < 0);
+    if (faltando.length) {
+      return { sucesso: false, completa: false, fase: fase, faltando: faltando };
+    }
+
+    const temNC = respostasDaOS.some(row =>
+      perguntasDaFase.indexOf(row[idxRPerg]) >= 0 && ehVerdadeiro(row[idxRNC]));
+
+    if (fase === 'Pré-Execução') {
+      const colEstado = getCol('Estado_Seguranca');
+      if (!colEstado) return { sucesso: false, erro: 'Coluna Estado_Seguranca nao existe na planilha (rode rodarSetupSheets)' };
+      const novoEstado = temNC ? 'Bloqueado' : 'Liberado';
+      osSheet.getRange(osRow, colEstado).setValue(novoEstado);
+      return { sucesso: true, completa: true, fase: fase, estado: novoEstado };
+    }
+
+    if (fase === 'Execução') {
+      const colExec = getCol('Checklist_Execucao_Completo');
+      if (!colExec) return { sucesso: false, erro: 'Coluna Checklist_Execucao_Completo nao existe na planilha (rode rodarSetupSheets)' };
+      osSheet.getRange(osRow, colExec).setValue(true);
+      return { sucesso: true, completa: true, fase: fase };
+    }
+
+    return { sucesso: true, completa: true, fase: fase };
+  });
+}
+
+// ─── consultarFaseChecklist — leitura pontual (Diretriz v1.1) ───────
+// Contrato item 4: o frontend pergunta ao servidor "essa OS ja tem
+// Fase 1/2 completas?" antes de decidir qual fase mostrar -- hoje o
+// CHK3F decide isso so pelo localStorage, que nao sobrevive a troca de
+// aparelho nem a limpeza de dados do navegador. So leitura, sem
+// checagem de posse (mesmo padrao de canCloseOS/lerCamposOS).
+function consultarFaseChecklist(osId) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const osSheet = ss.getSheetByName('Ordens_Servico');
+  const osRow = encontrarLinha(osSheet, osId, 0);
+  if (!osRow) return { erro: 'OS nao encontrada: ' + osId };
+
+  const colEstado = getCol('Estado_Seguranca');
+  const colExec = getCol('Checklist_Execucao_Completo');
+  const estadoSeguranca = colEstado ? osSheet.getRange(osRow, colEstado).getValue() : '';
+  const execucaoCompleta = colExec ? (osSheet.getRange(osRow, colExec).getValue() === true) : false;
+
+  return {
+    osId: osId,
+    preExecucaoCompleta: estadoSeguranca === 'Liberado' || estadoSeguranca === 'Bloqueado',
+    estadoSeguranca: estadoSeguranca || null,
+    execucaoCompleta: execucaoCompleta
+  };
 }
 
 // ================================================================

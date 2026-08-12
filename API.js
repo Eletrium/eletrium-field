@@ -148,6 +148,14 @@ function executarAcao(action, p) {
     // — base64 da selfie estoura limite de URL de GET/JSONP).
     case 'salvarSelfieEPI':
       return salvarSelfieEPI(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+    // Checklist 3 fases (CONTRATO-BACKEND-CHECKLIST-3-FASES.md, sessao de
+    // frontend) — fecha uma fase no servidor (grava Estado_Seguranca ou
+    // Checklist_Execucao_Completo quando a fase completa) e le o status
+    // atual das fases direto do servidor.
+    case 'fecharFaseChecklist':
+      return fecharFaseChecklist(p[0], p[1], p[2], p[3], p[4]);
+    case 'consultarFaseChecklist':
+      return consultarFaseChecklist(p[0]);
     default:
       return { erro: 'Acao desconhecida: ' + action };
   }
