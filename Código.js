@@ -266,14 +266,38 @@ function garantirLogCentral(ss) {
     sheet.getRange(1, idx, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('@');
   });
 
-  // 4) tentativas (K) como inteiro, 0 casas decimais.
-  const idxTentativasCol = nomes.indexOf('tentativas') + 1;
-  sheet.getRange(1, idxTentativasCol, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('0');
+  // 4) validacoes (4 listas Reject-input + formula de tentativas) +
+  // formato numerico de tentativas/entity_version -- extraido pra
+  // _aplicarValidacoesLogCentral (ver abaixo), reusada tambem no reparo
+  // de uma aba ja existente (_garantirColunasOutboxLogCentral).
+  _aplicarValidacoesLogCentral(sheet, nomes);
 
-  // 5) validacoes "Reject input", aplicadas de <col>2:<col><teto> em diante.
+  return sheet;
+}
+
+// _aplicarValidacoesLogCentral -- aplica (SEMPRE reaplica, nunca so
+// verifica) as 5 regras de validacao do Log_Central: 4 listas fechadas
+// (Reject input: status/tipo_operacao/erro_codigo/entity_type) + a
+// formula de tentativas, mais os formatos numericos de tentativas/
+// entity_version. Extraida em funcao propria e chamada tanto na criacao
+// da aba (garantirLogCentral) quanto no reparo de uma aba ja existente
+// (_garantirColunasOutboxLogCentral) -- achado real (12/08): uma
+// execucao de setupSheets() pode travar NO MEIO da aplicacao das
+// validacoes (foi exatamente o caso -- crash no bug de locale pt-BR na
+// formula de tentativas deixou a aba criada, mas sem essa validacao
+// especifica; a rodada seguinte, que teve sucesso, so verificava as 3
+// colunas outbox via _garantirColunasOutboxLogCentral, nunca revisitava
+// o resto). Reaplicar tudo incondicionalmente sempre que a aba ja
+// existe e mais simples e mais seguro do que tentar detectar qual
+// validacao especifica ficou faltando -- cobre qualquer ponto de
+// travamento no meio do setup original, nao so este caso.
+function _aplicarValidacoesLogCentral(sheet, headers) {
+  const idx = nomeCol => headers.indexOf(nomeCol) + 1;
+
   const aplicarListaRejeitando = (nomeCol, valores) => {
-    const idx = nomes.indexOf(nomeCol) + 1;
-    const range = sheet.getRange(2, idx, LOG_CENTRAL_LINHAS_VALIDACAO - 1, 1);
+    const col = idx(nomeCol);
+    if (col <= 0) return;
+    const range = sheet.getRange(2, col, LOG_CENTRAL_LINHAS_VALIDACAO - 1, 1);
     const regra = SpreadsheetApp.newDataValidation()
       .requireValueInList(valores, true)
       .setAllowInvalid(false)
@@ -291,25 +315,67 @@ function garantirLogCentral(ss) {
   aplicarListaRejeitando('erro_codigo', LOG_CENTRAL_ERRO_CODIGO_VALIDOS);
   aplicarListaRejeitando('entity_type', LOG_CENTRAL_ENTITY_TYPE_VALIDOS);
 
-  const idxTentativasValid = nomes.indexOf('tentativas') + 1;
-  const rangeTentativas = sheet.getRange(2, idxTentativasValid, LOG_CENTRAL_LINHAS_VALIDACAO - 1, 1);
-  // Planilha em locale pt-BR -- formulas customizadas de data validation
-  // exigem ';' como separador de argumento, nao ',' (mesma armadilha de
-  // localizacao ja documentada do lado SharePoint com ValidationFormula/
-  // OR->OU). Vírgula aqui falha com "argumento da regra de validacao de
-  // dados e invalido" -- confirmado ao vivo, so essa formula no projeto
-  // usa requireFormulaSatisfied (as outras 3 sao requireValueInList).
-  const regraTentativas = SpreadsheetApp.newDataValidation()
-    .requireFormulaSatisfied('=AND(ISNUMBER(K2); K2>=0; K2=INT(K2))')
-    .setAllowInvalid(false)
-    .build();
-  rangeTentativas.setDataValidation(regraTentativas);
+  const colTentativas = idx('tentativas');
+  if (colTentativas > 0) {
+    sheet.getRange(1, colTentativas, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('0');
+    const rangeTentativas = sheet.getRange(2, colTentativas, LOG_CENTRAL_LINHAS_VALIDACAO - 1, 1);
+    // Planilha em locale pt-BR -- formulas customizadas de data validation
+    // exigem ';' como separador de argumento, nao ',' (mesma armadilha de
+    // localizacao ja documentada do lado SharePoint com ValidationFormula/
+    // OR->OU). Vírgula aqui falha com "argumento da regra de validacao de
+    // dados e invalido" -- confirmado ao vivo, so essa formula no projeto
+    // usa requireFormulaSatisfied (as outras 4 sao requireValueInList).
+    const regraTentativas = SpreadsheetApp.newDataValidation()
+      .requireFormulaSatisfied('=AND(ISNUMBER(K2); K2>=0; K2=INT(K2))')
+      .setAllowInvalid(false)
+      .build();
+    rangeTentativas.setDataValidation(regraTentativas);
+  }
 
-  // 6) entity_version como inteiro, mesmo tratamento de tentativas.
-  const idxVersaoCol = nomes.indexOf('entity_version') + 1;
-  sheet.getRange(1, idxVersaoCol, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('0');
+  const colVersao = idx('entity_version');
+  if (colVersao > 0) sheet.getRange(1, colVersao, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('0');
+}
 
-  return sheet;
+// _debugLerEstruturaLogCentral -- diagnostico read-only TEMPORARIO, mesmo
+// padrao do diagValidacaoStatus usado no deploy do KM (10/08): confirma a
+// estrutura real pos-setupSheets() sem depender de clasp run (bloqueado
+// por escopo OAuth nesta sessao). Rodar uma vez no editor, copiar o
+// resultado de Ver > Registros, depois REMOVER esta funcao.
+function _debugLerEstruturaLogCentral() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName('Log_Central');
+  if (!sheet) { Logger.log(JSON.stringify({ erro: 'Log_Central nao existe' })); return; }
+
+  const numCols = sheet.getLastColumn();
+  const headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
+
+  const lerValidacao = (nomeCol) => {
+    const idx = headers.indexOf(nomeCol);
+    if (idx < 0) return { existe: false };
+    const dv = sheet.getRange(2, idx + 1).getDataValidation();
+    if (!dv) return { existe: true, validacao: null };
+    return {
+      existe: true,
+      tipo: dv.getCriteriaType().toString(),
+      valores: dv.getCriteriaValues(),
+      allowInvalid: dv.getAllowInvalid(),
+    };
+  };
+
+  const resultado = {
+    numColunas: numCols,
+    headers: headers,
+    frozenRows: sheet.getFrozenRows(),
+    linhasComDado: sheet.getLastRow(),
+    validacoes: {
+      status: lerValidacao('status'),
+      tipo_operacao: lerValidacao('tipo_operacao'),
+      erro_codigo: lerValidacao('erro_codigo'),
+      entity_type: lerValidacao('entity_type'),
+      tentativas: lerValidacao('tentativas'),
+    },
+  };
+  Logger.log(JSON.stringify(resultado, null, 2));
 }
 
 // _garantirColunasOutboxLogCentral -- idempotente, mesmo padrao das
@@ -317,16 +383,25 @@ function garantirLogCentral(ss) {
 // criado ANTES desta rodada (schema sem entity_type/entity_id/
 // entity_version), adiciona as 3 colunas no final sem mexer no resto.
 function _garantirColunasOutboxLogCentral(sheet) {
-  const lastCol = sheet.getLastColumn();
-  const headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  let lastCol = sheet.getLastColumn();
+  let headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
   LOG_CENTRAL_COLUNAS_OUTBOX.forEach(c => {
     if (!headers.includes(c.nome)) {
       const nextCol = sheet.getLastColumn() + 1;
       sheet.getRange(1, nextCol).setValue(c.nome);
       sheet.setColumnWidth(nextCol, c.largura);
       if (c.nome === 'entity_version') sheet.getRange(1, nextCol, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('0');
+      headers.push(c.nome);
     }
   });
+
+  // Reparo (achado real, 12/08): uma execucao anterior de setupSheets()
+  // pode ter criado a aba e travado antes de terminar de aplicar as
+  // validacoes -- nao so a falta de coluna outbox. Reaplica as 5
+  // validacoes incondicionalmente toda vez que a aba ja existe (nao so
+  // quando falta coluna), pra nao depender de detectar qual delas ficou
+  // faltando.
+  _aplicarValidacoesLogCentral(sheet, headers);
 }
 
 // classificarErroLogCentral: heurística best-effort pra encaixar uma
