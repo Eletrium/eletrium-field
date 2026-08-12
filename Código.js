@@ -343,25 +343,25 @@ function classificarErroLogCentral(mensagem) {
 }
 
 // _comLockDeOS -- LockService.getScriptLock() (ARQUITETURA-SYNC-LOG-
-// CENTRAL.md, ponto 3). Apps Script nao tem lock nativo por chave
-// arbitraria (nao da pra travar "so a OS-123") -- a unica API real e
-// script-inteiro/documento-inteiro. Serializa TODAS as operacoes
-// criticas entre si, nao so as da mesma OS -- limitacao real, aceitavel
-// no volume de uso do PWA, documentada no arquivo acima. Se o lock nao
-// e obtido dentro do timeout, fn() NAO roda e nada e gravado em
-// Log_Central (evita poluir o log com uma tentativa que nunca
-// aconteceu) -- retry do MESMO operationId tenta de novo do zero, sem
-// violar idempotencia.
+// CENTRAL.md, ajuste 4 do auditor). Apps Script nao tem lock nativo por
+// chave arbitraria (nao da pra travar "so a OS-123") -- a unica API real
+// e script-inteiro/documento-inteiro. Por isso o lock cobre SO a reserva
+// da entity_version + a linha de Intent Log (leitura+incremento+append,
+// tudo rapido, metadado) -- NUNCA fn() (a mutacao real: upload, chamada
+// externa, qualquer coisa lenta) fica de fora do lock, liberado antes de
+// fn() rodar. Devolve {lockObtido, valor} pra separar "conseguiu o lock"
+// de "o que o callback calculou" -- sem isso um valor legitimo
+// devolvido pelo callback poderia ser confundido com falha de lock.
 const LOCK_TIMEOUT_MS = 10000;
 
 function _comLockDeOS(fn) {
   const lock = LockService.getScriptLock();
   const obtido = lock.tryLock(LOCK_TIMEOUT_MS);
   if (!obtido) {
-    return _recusa('Sistema ocupado, tente novamente em instantes');
+    return { lockObtido: false, valor: null };
   }
   try {
-    return fn();
+    return { lockObtido: true, valor: fn() };
   } finally {
     lock.releaseLock();
   }
@@ -370,7 +370,7 @@ function _comLockDeOS(fn) {
 // _proximaVersaoEntidadeOS -- maior entity_version ja gravado em
 // Log_Central pra este OS_ID, +1 (ou 1 se nenhum ainda). SO deve ser
 // chamada de dentro de _comLockDeOS -- ler-incrementar fora do lock e
-// exatamente a corrida que o ponto 3 do auditor pede pra fechar.
+// exatamente a corrida que o ajuste 3 do auditor pede pra fechar.
 function _proximaVersaoEntidadeOS(osId) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const log = garantirLogCentral(ss);
@@ -401,6 +401,13 @@ function _proximaVersaoEntidadeOS(osId) {
 // checklist: fase ou pergunta) passam `entidade.id` explicito
 // (osId + ':' + algo) pra nao colidir entity_id entre eventos
 // genuinamente diferentes da mesma OS.
+//
+// Padrao Intent Log (ajuste 3 do auditor): a linha de Log_Central e
+// gravada como LOCAL_PENDING ANTES de fn() rodar, nao depois -- evita
+// "mutacao aconteceu, ninguem sabe que precisa sincronizar" se fn()
+// nunca chegar a rodar por algum motivo externo. Reserva da versao +
+// esse append acontecem sob lock (rapido); fn() roda DEPOIS, fora do
+// lock (ajuste 4 -- lock nunca durante upload/chamada externa).
 function executarIdempotente(operationId, tipoOperacao, osId, tecnicoId, dispositivoId, fn, entidade) {
   if (!operationId) return fn();
 
@@ -432,25 +439,24 @@ function executarIdempotente(operationId, tipoOperacao, osId, tecnicoId, disposi
     }
     // Existe mas não SYNCED (tentativa anterior deu erro) — reprocessa.
     // MESMA entity_version da tentativa original (retry nao e evento
-    // novo) -- so a gravacao de fn()+Log_Central roda sob lock.
-    return _comLockDeOS(() => {
+    // novo). Reserva (incrementar tentativas, marcar SENDING) e rapida,
+    // sob lock; fn() roda DEPOIS, fora do lock.
+    const linhaNum = i + 1;
+    const reserva = _comLockDeOS(() => {
       const tentativaAtual = (parseInt(dados[i][idxTentativas]) || 0) + 1;
-      log.getRange(i + 1, idxTentativas + 1).setValue(tentativaAtual);
-      log.getRange(i + 1, idxStatus + 1).setValue('SENDING');
-      return processarEGravarLog(log, i + 1, h, fn);
+      log.getRange(linhaNum, idxTentativas + 1).setValue(tentativaAtual);
+      log.getRange(linhaNum, idxStatus + 1).setValue('SENDING');
+      return true;
     });
+    if (!reserva.lockObtido) return _recusa(operationId, 'Sistema ocupado, tente novamente em instantes', { error_code: 'CONEXAO_INDISPONIVEL', retryable: true, status: 'SYNC_ERROR' });
+    return processarEGravarLog(log, linhaNum, h, fn, operationId);
   }
 
-  // Primeira vez que este operation_id aparece -- sob lock: ler versao
-  // atual -> incrementar -> gravar entidade (fn(), dentro de
-  // processarEGravarLog) -> gravar Log_Central -> liberar lock. Isto
-  // fecha o cenario real "entidade alterada + Log_Central falhou": se a
-  // gravacao do Log_Central falhasse DEPOIS de fn() ja ter rodado, um
-  // retry da MESMA operationId reexecutaria fn() de novo (idempotencia
-  // quebrada, sem registro de que ja tinha rodado); com as duas escritas
-  // na MESMA tentativa sob o mesmo lock, um erro no meio propaga pro
-  // chamador (nao fica um operation_id "orfao" sem rastro nenhum).
-  return _comLockDeOS(() => {
+  // Primeira vez que este operation_id aparece -- Intent Log sob lock:
+  // ler versao atual -> incrementar -> gravar a linha como LOCAL_PENDING
+  // (rapido, so metadado) -> liberar lock -> SO ENTAO rodar fn() (fora
+  // do lock) -> atualizar a MESMA linha pro desfecho final.
+  const reserva = _comLockDeOS(() => {
     const versao = _proximaVersaoEntidadeOS(osId);
     const linha = new Array(h.length).fill('');
     linha[idxOpId] = operationId;
@@ -463,7 +469,7 @@ function executarIdempotente(operationId, tipoOperacao, osId, tecnicoId, disposi
     // aplica timezone/serial silenciosamente).
     linha[h.indexOf('criado_em')] = new Date().toISOString();
     linha[h.indexOf('recebido_em')] = new Date().toISOString();
-    linha[idxStatus] = 'SENDING';
+    linha[idxStatus] = 'LOCAL_PENDING';
     linha[idxTentativas] = 1;
     const idxEntityType = h.indexOf('entity_type');
     const idxEntityId = h.indexOf('entity_id');
@@ -472,30 +478,63 @@ function executarIdempotente(operationId, tipoOperacao, osId, tecnicoId, disposi
     if (idxEntityId >= 0) linha[idxEntityId] = entityId;
     if (idxEntityVersion >= 0) linha[idxEntityVersion] = versao;
     log.appendRow(linha);
-    return processarEGravarLog(log, log.getLastRow(), h, fn);
+    return log.getLastRow();
   });
+  if (!reserva.lockObtido) return _recusa(operationId, 'Sistema ocupado, tente novamente em instantes', { error_code: 'CONEXAO_INDISPONIVEL', retryable: true, status: 'SYNC_ERROR' });
+  return processarEGravarLog(log, reserva.valor, h, fn, operationId);
 }
 
-function processarEGravarLog(log, linhaNum, headers, fn) {
+// processarEGravarLog -- roda fn() FORA de qualquer lock (ajuste 4). A
+// linha ja existe como LOCAL_PENDING/SENDING (Intent Log, gravada antes
+// desta chamada) -- aqui so atualiza o desfecho.
+//
+// T-LOG-01 (log criado, mutacao falha): fn() lanca excecao -- a linha
+// (que ja existia) e marcada SYNC_ERROR, erro devolvido no envelope
+// canonico (retryable:true, pra retry automatico do outbox).
+//
+// T-LOG-02 (mutacao ok, update do status do log falha): fn() teve
+// sucesso -- a ENTIDADE JA FOI ALTERADA nesse ponto -- mas a escrita que
+// marca SYNCED no Log_Central falha. Devolve sucesso pro chamador (a
+// operacao realmente funcionou, seria desonesto dizer que falhou), mas
+// tenta best-effort marcar a linha como SYNC_ERROR (nao deixar presa em
+// LOCAL_PENDING pra sempre) com um resultado_json de que a mutacao
+// funcionou -- pra a varredura periodica (ajuste 7 do auditor) achar e
+// reconciliar essa linha, em vez dela ficar invisivel.
+function processarEGravarLog(log, linhaNum, headers, fn, operationId) {
   const idxStatus = headers.indexOf('status');
   const idxResultado = headers.indexOf('resultado_json');
   const idxSinc = headers.indexOf('sincronizado_em');
   const idxErro = headers.indexOf('erro_detalhe');
   const idxErroCodigo = headers.indexOf('erro_codigo');
+
+  let resultadoFn;
   try {
-    const resultado = fn();
-    log.getRange(linhaNum, idxStatus + 1).setValue('SYNCED');
-    log.getRange(linhaNum, idxResultado + 1).setValue(JSON.stringify(resultado));
-    // sincronizado_em (coluna I) e TEXTO ISO 8601, nunca Date nativo —
-    // mesma regra critica de criado_em/recebido_em (ver executarIdempotente).
-    log.getRange(linhaNum, idxSinc + 1).setValue(new Date().toISOString());
-    return resultado;
+    resultadoFn = fn();
   } catch (e) {
+    // T-LOG-01
     const mensagem = String((e && e.message) || e);
-    log.getRange(linhaNum, idxStatus + 1).setValue('SYNC_ERROR');
-    log.getRange(linhaNum, idxErro + 1).setValue(mensagem);
-    if (idxErroCodigo >= 0) log.getRange(linhaNum, idxErroCodigo + 1).setValue(classificarErroLogCentral(mensagem));
-    throw e;
+    const codigo = classificarErroLogCentral(mensagem);
+    try { log.getRange(linhaNum, idxStatus + 1).setValue('SYNC_ERROR'); } catch (e1) { /* Log_Central inacessivel -- nada mais a tentar */ }
+    try { log.getRange(linhaNum, idxErro + 1).setValue(mensagem); } catch (e1) { /* idem */ }
+    try { if (idxErroCodigo >= 0) log.getRange(linhaNum, idxErroCodigo + 1).setValue(codigo); } catch (e1) { /* idem */ }
+    return _recusa(operationId, mensagem, { error_code: codigo, retryable: true, status: 'SYNC_ERROR' });
+  }
+
+  const envelope = _sucesso(operationId, resultadoFn);
+  try {
+    log.getRange(linhaNum, idxStatus + 1).setValue('SYNCED');
+    log.getRange(linhaNum, idxResultado + 1).setValue(JSON.stringify(envelope));
+    // sincronizado_em (coluna I) e TEXTO ISO 8601, nunca Date nativo —
+    // mesma regra critica de criado_em/recebido_em.
+    log.getRange(linhaNum, idxSinc + 1).setValue(new Date().toISOString());
+    return envelope;
+  } catch (eLog) {
+    // T-LOG-02 -- resultadoFn existe, a mutacao ja aconteceu de verdade.
+    const mensagemLog = String((eLog && eLog.message) || eLog);
+    try { log.getRange(linhaNum, idxStatus + 1).setValue('SYNC_ERROR'); } catch (e2) {}
+    try { log.getRange(linhaNum, idxErro + 1).setValue('Mutacao OK, falha ao registrar SYNCED: ' + mensagemLog); } catch (e2) {}
+    try { log.getRange(linhaNum, idxResultado + 1).setValue(JSON.stringify(envelope)); } catch (e2) {}
+    return Object.assign({}, envelope, { log_sync_warning: mensagemLog });
   }
 }
 
@@ -547,10 +586,10 @@ const CAMPOS_ARQUIVO_PERMITIDOS = ['Laudo_URL', 'Assinatura_URL', 'KM_Foto_Desvi
 
 function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArquivo, operationId, dispositivoId) {
   if (CAMPOS_ARQUIVO_PERMITIDOS.indexOf(campo) < 0) {
-    return _recusa('Campo nao permitido: ' + campo);
+    return _recusa(operationId, 'Campo nao permitido: ' + campo);
   }
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return _recusa(posse.erro);
+  if (!posse.ok) return _recusa(operationId, posse.erro);
   // tipo_operacao pro Log_Central (lista fechada aprovada Geovane/Cowork
   // 2, 12/08): Assinatura_URL bate exato com ASSINATURA. Laudo_URL nao
   // tem categoria propria na lista aprovada -- aproximado pra UPLOAD_FOTO
@@ -566,10 +605,10 @@ function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArqui
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const osSheet = ss.getSheetByName('Ordens_Servico');
     const osRow = encontrarLinha(osSheet, osId, 0);
-    if (!osRow) return _recusa('OS nao encontrada: ' + osId);
+    if (!osRow) return _recusa(operationId, 'OS nao encontrada: ' + osId);
 
     const col = getCol(campo);
-    if (!col) return _recusa('Coluna ' + campo + ' nao existe na planilha (rode rodarSetupSheets)');
+    if (!col) return _recusa(operationId, 'Coluna ' + campo + ' nao existe na planilha (rode rodarSetupSheets)');
 
     const bytes = Utilities.base64Decode(base64Data);
     const blob = Utilities.newBlob(bytes, mimeType || 'image/jpeg', nomeArquivo || (campo + '_' + osId + '.jpg'));
@@ -600,7 +639,7 @@ const CONFIRMACOES_SEGURANCA_MIN = ['epi', 'aterramento', 'bloqueio_energia', 's
 
 function confirmarSegurancaPreExecucao(osId, tecnicoId, confirmacoes, temNaoConformidade, operationId, dispositivoId) {
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return _recusa(posse.erro);
+  if (!posse.ok) return _recusa(operationId, posse.erro);
   // tipo_operacao pro Log_Central: a lista fechada aprovada (Geovane/
   // Cowork 2, 12/08) nao tem categoria propria pra "confirmacao de
   // seguranca" -- aproximado pra CHECKLIST_RESPOSTA (o mais proximo
@@ -611,15 +650,15 @@ function confirmarSegurancaPreExecucao(osId, tecnicoId, confirmacoes, temNaoConf
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const osSheet = ss.getSheetByName('Ordens_Servico');
     const osRow = encontrarLinha(osSheet, osId, 0);
-    if (!osRow) return _recusa('OS nao encontrada: ' + osId);
+    if (!osRow) return _recusa(operationId, 'OS nao encontrada: ' + osId);
 
     const colEstado = getCol('Estado_Seguranca');
-    if (!colEstado) return _recusa('Coluna Estado_Seguranca nao existe na planilha (rode rodarSetupSheets)');
+    if (!colEstado) return _recusa(operationId, 'Coluna Estado_Seguranca nao existe na planilha (rode rodarSetupSheets)');
 
     const c = confirmacoes || {};
     const faltando = CONFIRMACOES_SEGURANCA_MIN.filter(item => !c[item]);
     if (faltando.length) {
-      return _recusa('Confirmacoes de seguranca incompletas', { faltando: faltando, motivos: faltando });
+      return _recusa(operationId, 'Confirmacoes de seguranca incompletas', { faltando: faltando, blocking_reasons: faltando });
     }
 
     const novoEstado = temNaoConformidade ? 'Bloqueado' : 'Liberado';
@@ -650,7 +689,7 @@ const EPI_ITENS_MIN = ['capacete', 'luvas_isolantes', 'oculos_protecao', 'calcad
 
 function salvarSelfieEPI(osId, tecnicoId, base64Selfie, mimeType, epiChecklist, diarioTexto, operationId, dispositivoId) {
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return _recusa(posse.erro);
+  if (!posse.ok) return _recusa(operationId, posse.erro);
   // tipo_operacao pro Log_Central: sem categoria propria "selfie" na
   // lista aprovada -- aproximado pra UPLOAD_FOTO (a selfie e uma foto;
   // EPI/diario sao dados secundarios na mesma chamada). Sinalizado, nao
@@ -659,7 +698,7 @@ function salvarSelfieEPI(osId, tecnicoId, base64Selfie, mimeType, epiChecklist, 
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const osSheet = ss.getSheetByName('Ordens_Servico');
     const osRow = encontrarLinha(osSheet, osId, 0);
-    if (!osRow) return _recusa('OS nao encontrada: ' + osId);
+    if (!osRow) return _recusa(operationId, 'OS nao encontrada: ' + osId);
 
     const colSelfie = getCol('Selfie_URL');
     const colEpiOk = getCol('EPI_Checklist_OK');
@@ -667,7 +706,7 @@ function salvarSelfieEPI(osId, tecnicoId, base64Selfie, mimeType, epiChecklist, 
     const colDiario = getCol('Diario_Tecnico');
     const colDiarioOk = getCol('Diario_Preenchido');
     if (!colSelfie || !colEpiOk || !colEpiJson || !colDiario || !colDiarioOk) {
-      return _recusa('Colunas de Selfie/EPI/Diario nao existem na planilha (rode rodarSetupSheets)');
+      return _recusa(operationId, 'Colunas de Selfie/EPI/Diario nao existem na planilha (rode rodarSetupSheets)');
     }
 
     let urlNova = '';
@@ -772,6 +811,13 @@ function encontrarLinha(sheet, valor, colIndex) {
 // ID_Tecnico nao existe (planilha ainda sem o schema, mesmo padrao
 // usado em canCloseOS) -- nunca quando ela existe mas esta vazia ou
 // diferente do tecnicoId recebido.
+// FAIL-CLOSED (auditor, ajuste 2): se a posse nao pode ser determinada
+// por QUALQUER motivo -- OS nao encontrada, coluna ID_Tecnico ausente --
+// BLOQUEIA a escrita. O fail-open anterior (coluna ausente = sempre
+// autoriza) foi explicitamente reprovado pelo auditor pra producao:
+// "nao pode ir pra producao". Sem exceção pra planilha ainda sem o
+// schema -- se ID_Tecnico nao existe, rode rodarSetupSheets primeiro;
+// nao ha caminho onde "nao sei quem e o dono" deveria autorizar a escrita.
 function verificarPosseOS(osId, tecnicoId) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const osSheet = ss.getSheetByName('Ordens_Servico');
@@ -780,7 +826,9 @@ function verificarPosseOS(osId, tecnicoId) {
   if (!osRow) return { ok: false, erro: 'OS nao encontrada: ' + osId };
 
   const colTec = getCol('ID_Tecnico');
-  if (!colTec) return { ok: true };
+  if (!colTec) {
+    return { ok: false, erro: 'Nao foi possivel determinar posse da OS ' + osId + ' (coluna ID_Tecnico ausente na planilha -- rode rodarSetupSheets)' };
+  }
 
   const tecnicoDaOS = String(osSheet.getRange(osRow, colTec).getValue() || '').trim();
   if (tecnicoDaOS !== String(tecnicoId || '').trim()) {
@@ -809,8 +857,48 @@ function verificarPosseOS(osId, tecnicoId) {
 // especifico por funcao. Campos legados (blockingReasons/faltando/
 // exigeJustificativa/mensagem) continuam presentes via `extras` --
 // nao removidos, nada que ja leia eles quebra.
-function _recusa(erro, extras) {
-  return Object.assign({ sucesso: false, erro: erro, motivos: [erro] }, extras || {});
+// Contrato canonico de resposta (auditor, ajuste 1 -- SUBSTITUI o fix
+// pontual anterior de sucesso/erro/motivos): {success, status,
+// operation_id, error_code, retryable, blocking_reasons} em TODA
+// resposta de funcao de escrita, sucesso ou recusa. `status` usa o
+// vocabulario ja aprovado (LOG_CENTRAL_STATUS_VALIDOS). `error_code`
+// reusa LOG_CENTRAL_ERRO_CODIGO_VALIDOS via classificarErroLogCentral.
+// `retryable` distingue recusa de regra de negocio (false) de falha
+// transitoria (true -- lock ocupado, erro do Sheets). `erro` (mensagem
+// legivel) e uma adicao ALEM dos 6 campos do auditor, sinalizada aqui --
+// error_code sozinho nao e algo pra mostrar ao tecnico. Campos legados
+// por funcao (blockingReasons/faltando/exigeJustificativa/mensagem)
+// continuam presentes via `extras`, mais sucesso/motivos (nomes da
+// versao anterior) -- nada que ja leia eles quebra.
+function _sucesso(operationId, resultado) {
+  return Object.assign({
+    success: true,
+    status: 'SYNCED',
+    operation_id: operationId || null,
+    error_code: null,
+    retryable: false,
+    blocking_reasons: [],
+  }, resultado || {});
+}
+
+function _recusa(operationId, erro, extras) {
+  extras = extras || {};
+  const status = extras.status || 'DIVERGENT';
+  const retryable = extras.retryable === true;
+  const errorCode = extras.error_code || classificarErroLogCentral(erro);
+  const blockingReasons = extras.blocking_reasons || extras.motivos || [erro];
+  const base = {
+    success: false,
+    status: status,
+    operation_id: operationId || null,
+    error_code: errorCode,
+    retryable: retryable,
+    blocking_reasons: blockingReasons,
+    erro: erro,
+    sucesso: false,
+    motivos: blockingReasons,
+  };
+  return Object.assign(base, extras);
 }
 
 // ─── encontrarOuCriarLinhaDiaria ──────────────────────────────────
@@ -1106,7 +1194,7 @@ function registrarInicioDia(tecnicoId, tecnicoNome, usaVeiculo, kmInicial, veicu
   return executarIdempotente(operationId, 'APONTAMENTO', '', tecnicoId, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Diaria_Tecnico');
-  if (!sheet) return _recusa('Aba Diaria_Tecnico nao encontrada');
+  if (!sheet) return _recusa(operationId, 'Aba Diaria_Tecnico nao encontrada');
   addMissingHeaders();
   const hoje = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   const now = new Date();
@@ -1133,7 +1221,7 @@ function registrarFimDia(tecnicoId, kmFinal, operationId, dispositivoId) {
   return executarIdempotente(operationId, 'APONTAMENTO', '', tecnicoId, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Diaria_Tecnico');
-  if (!sheet) return _recusa('Aba Diaria_Tecnico nao encontrada');
+  if (!sheet) return _recusa(operationId, 'Aba Diaria_Tecnico nao encontrada');
   const hoje = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   const now = new Date();
   const dados = sheet.getDataRange().getValues();
@@ -1144,7 +1232,7 @@ function registrarFimDia(tecnicoId, kmFinal, operationId, dispositivoId) {
       : String(dados[i][0]).substring(0, 10);
     if (dl === hoje && String(dados[i][1]) === String(tecnicoId)) { linha = i + 1; break; }
   }
-  if (!linha) return _recusa('Registro do dia nao encontrado');
+  if (!linha) return _recusa(operationId, 'Registro do dia nao encontrado');
   sheet.getRange(linha, 5).setValue(now);  // Hora_Saida
   sheet.getRange(linha, 13).setValue('Encerrado'); // Status_Dia
   let kmRodado = 0;
@@ -1169,7 +1257,7 @@ function registrarFimDia(tecnicoId, kmFinal, operationId, dispositivoId) {
 function registrarUsoVeiculo(tecnicoId, usaVeiculo) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Diaria_Tecnico');
-  if (!sheet) return _recusa('Aba Diaria_Tecnico nao encontrada');
+  if (!sheet) return _recusa(null, 'Aba Diaria_Tecnico nao encontrada');
   addMissingHeaders();
   const hoje = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   const linha = encontrarOuCriarLinhaDiaria(sheet, tecnicoId, hoje);
@@ -1181,13 +1269,13 @@ function registrarUsoVeiculo(tecnicoId, usaVeiculo) {
 // ─── iniciarOS ───────────────────────────────────────────────────
 function iniciarOS(osId, tecnicoId, tecnicoNome, local) {
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return _recusa(posse.erro);
+  if (!posse.ok) return _recusa(null, posse.erro);
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const now = new Date();
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
-  if (!osRow) return _recusa('OS nao encontrada: ' + osId);
+  if (!osRow) return _recusa(null, 'OS nao encontrada: ' + osId);
 
   const updates = {
     'Status': 'Em Andamento',
@@ -1236,7 +1324,7 @@ function pausarOS(osId, tecnicoId, tecnicoNome, motivo, osInterrupcaoId, operati
   const now = new Date();
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
-  if (!osRow) return _recusa('OS nao encontrada: ' + osId);
+  if (!osRow) return _recusa(operationId, 'OS nao encontrada: ' + osId);
 
   const colRet = getCol('Hora_Ultima_Retomada');
   const colIni = getCol('Hora_Inicio');
@@ -1285,7 +1373,7 @@ function retomarOS(osId, tecnicoId, tecnicoNome, operationId, dispositivoId) {
   const now = new Date();
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
-  if (!osRow) return _recusa('OS nao encontrada: ' + osId);
+  if (!osRow) return _recusa(operationId, 'OS nao encontrada: ' + osId);
 
   const colProd = getCol('Horas_Produtivas');
   const colQtdRet = getCol('Qtd_Retomadas');
@@ -1419,18 +1507,18 @@ function canCloseOS(osId, dadosPendentes) {
 // ─── encerrarOS ──────────────────────────────────────────────────
 function encerrarOS(osId, tecnicoId, tecnicoNome, dadosEnc) {
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return _recusa(posse.erro);
+  if (!posse.ok) return _recusa(null, posse.erro);
 
   const check = canCloseOS(osId, { fotosURL: dadosEnc.fotosURL || '' });
   if (!check.allowed) {
-    return _recusa('OS nao pode ser concluida ainda', { blockingReasons: check.blockingReasons, motivos: check.blockingReasons });
+    return _recusa(null, 'OS nao pode ser concluida ainda', { blockingReasons: check.blockingReasons, blocking_reasons: check.blockingReasons });
   }
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const now = new Date();
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
-  if (!osRow) return _recusa('OS nao encontrada: ' + osId);
+  if (!osRow) return _recusa(null, 'OS nao encontrada: ' + osId);
 
   const colEmPausa = getCol('Em_Pausa_Agora');
   const colProd = getCol('Horas_Produtivas');
@@ -1496,7 +1584,7 @@ function criarOSEmergencia(dados) {
   // desprezivel sem mudar o prefixo 'EMG-' que o resto do sistema reconhece.
   const novoId = 'EMG-' + Utilities.formatDate(now, TZ, 'yyyyMMddHHmmss') + '-' + Math.floor(100 + Math.random() * 900);
   const osSheet = ss.getSheetByName('Ordens_Servico');
-  if (!osSheet) return _recusa('Aba Ordens_Servico nao encontrada');
+  if (!osSheet) return _recusa(null, 'Aba Ordens_Servico nao encontrada');
 
   const headers = osSheet.getRange(1, 1, 1, osSheet.getLastColumn()).getValues()[0];
   const novaOS = new Array(headers.length).fill('');
@@ -1714,7 +1802,7 @@ function salvarResposta(osId, idSharePointOS, perguntaId, textoPergunta,
   return executarIdempotente(operationId, 'CHECKLIST_RESPOSTA', osId, tecnico, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const respSheet = ss.getSheetByName('Checklist_Respostas');
-  if (!respSheet) return _recusa('Aba Checklist_Respostas nao encontrada');
+  if (!respSheet) return _recusa(operationId, 'Aba Checklist_Respostas nao encontrada');
   respSheet.appendRow([
     osId,
     idSharePointOS || '',
@@ -1760,20 +1848,20 @@ const FASES_CHECKLIST_VALIDAS = ['Pré-Execução', 'Execução', 'Pós-Execuç�
 
 function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) {
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return _recusa(posse.erro);
+  if (!posse.ok) return _recusa(operationId, posse.erro);
 
   if (FASES_CHECKLIST_VALIDAS.indexOf(fase) < 0) {
-    return _recusa('Fase invalida: ' + fase);
+    return _recusa(operationId, 'Fase invalida: ' + fase);
   }
 
   return executarIdempotente(operationId, 'CHECKLIST_RESPOSTA', osId, tecnicoId, dispositivoId, () => {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const osSheet = ss.getSheetByName('Ordens_Servico');
     const osRow = encontrarLinha(osSheet, osId, 0);
-    if (!osRow) return _recusa('OS nao encontrada: ' + osId);
+    if (!osRow) return _recusa(operationId, 'OS nao encontrada: ' + osId);
 
     const pergSheet = ss.getSheetByName('Perguntas_Checklist');
-    if (!pergSheet) return _recusa('Aba Perguntas_Checklist nao encontrada');
+    if (!pergSheet) return _recusa(operationId, 'Aba Perguntas_Checklist nao encontrada');
     const pDados = pergSheet.getDataRange().getValues();
     const pH = pDados[0];
     const idxFase = pH.indexOf('Fase_Execucao');
@@ -1781,7 +1869,7 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
     const idxAtivo = pH.indexOf('Ativo');
     const idxIdPerg = pH.indexOf('ID_Pergunta');
     if (idxFase < 0 || idxObrig < 0) {
-      return _recusa('Colunas Fase_Execucao/Obrigatoria nao existem na planilha (rode rodarSetupSheets)');
+      return _recusa(operationId, 'Colunas Fase_Execucao/Obrigatoria nao existem na planilha (rode rodarSetupSheets)');
     }
 
     const ehVerdadeiro = (v) => v === true || v === 'TRUE' || v === 'true';
@@ -1793,7 +1881,7 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
       .map(row => row[idxIdPerg]);
 
     const respSheet = ss.getSheetByName('Checklist_Respostas');
-    if (!respSheet) return _recusa('Aba Checklist_Respostas nao encontrada');
+    if (!respSheet) return _recusa(operationId, 'Aba Checklist_Respostas nao encontrada');
     const rDados = respSheet.getDataRange().getValues();
     const rH = rDados[0];
     const idxROS = rH.indexOf('ID_OS');
@@ -1804,8 +1892,8 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
 
     const faltando = obrigatoriasDaFase.filter(id => idsRespondidos.indexOf(id) < 0);
     if (faltando.length) {
-      return _recusa('Fase incompleta: faltam perguntas obrigatorias (' + faltando.join(', ') + ')',
-        { completa: false, fase: fase, faltando: faltando, motivos: faltando });
+      return _recusa(operationId, 'Fase incompleta: faltam perguntas obrigatorias (' + faltando.join(', ') + ')',
+        { completa: false, fase: fase, faltando: faltando, blocking_reasons: faltando });
     }
 
     const temNC = respostasDaOS.some(row =>
@@ -1813,7 +1901,7 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
 
     if (fase === 'Pré-Execução') {
       const colEstado = getCol('Estado_Seguranca');
-      if (!colEstado) return _recusa('Coluna Estado_Seguranca nao existe na planilha (rode rodarSetupSheets)');
+      if (!colEstado) return _recusa(operationId, 'Coluna Estado_Seguranca nao existe na planilha (rode rodarSetupSheets)');
       const novoEstado = temNC ? 'Bloqueado' : 'Liberado';
       osSheet.getRange(osRow, colEstado).setValue(novoEstado);
       return { sucesso: true, completa: true, fase: fase, estado: novoEstado };
@@ -1821,7 +1909,7 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
 
     if (fase === 'Execução') {
       const colExec = getCol('Checklist_Execucao_Completo');
-      if (!colExec) return _recusa('Coluna Checklist_Execucao_Completo nao existe na planilha (rode rodarSetupSheets)');
+      if (!colExec) return _recusa(operationId, 'Coluna Checklist_Execucao_Completo nao existe na planilha (rode rodarSetupSheets)');
       osSheet.getRange(osRow, colExec).setValue(true);
       return { sucesso: true, completa: true, fase: fase };
     }
@@ -1968,14 +2056,14 @@ function getOfertaAlocacao(ofertaId, tecnicoId, exp, sig) {
 function registrarAceiteOferta(ofertaId, tecnicoId, aceito, motivoRecusa, operationId, dispositivoId) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Alocacoes_Ofertas');
-  if (!sheet) return _recusa('Aba Alocacoes_Ofertas nao encontrada');
+  if (!sheet) return _recusa(operationId, 'Aba Alocacoes_Ofertas nao encontrada');
 
   const ultimaPre = _ultimaLinhaOferta(sheet, ofertaId);
-  if (!ultimaPre) return _recusa('Oferta nao encontrada: ' + ofertaId);
+  if (!ultimaPre) return _recusa(operationId, 'Oferta nao encontrada: ' + ofertaId);
   const gPre = (campo) => ultimaPre.valores[ultimaPre.headers.indexOf(campo)];
 
   if (String(gPre('Tecnico_ID')) !== String(tecnicoId)) {
-    return _recusa('Tecnico ' + tecnicoId + ' nao tem posse desta oferta');
+    return _recusa(operationId, 'Tecnico ' + tecnicoId + ' nao tem posse desta oferta');
   }
 
   // OS_ID real da oferta -- lido ANTES de executarIdempotente pra
@@ -1992,15 +2080,18 @@ function registrarAceiteOferta(ofertaId, tecnicoId, aceito, motivoRecusa, operat
     // executarIdempotente ja devolveu o resultado cacheado antes de
     // rodar este fn() de novo).
     const ultima = _ultimaLinhaOferta(sheet, ofertaId);
-    if (!ultima) return _recusa('Oferta nao encontrada: ' + ofertaId);
+    if (!ultima) return _recusa(operationId, 'Oferta nao encontrada: ' + ofertaId);
     const g = (campo) => ultima.valores[ultima.headers.indexOf(campo)];
 
     if (g('Status') !== 'Pendente') {
-      return _recusa('Oferta ja foi respondida', { status: g('Status') });
+      // NAO usar `status` aqui (extras.status) -- colidiria com o campo
+      // canonico do envelope (SYNCED/DIVERGENT/SYNC_ERROR). oferta_status
+      // e o status DE NEGOCIO da oferta (Aceita/Recusada), campo distinto.
+      return _recusa(operationId, 'Oferta ja foi respondida', { oferta_status: g('Status') });
     }
 
     if (aceito !== true && !(motivoRecusa && String(motivoRecusa).trim())) {
-      return _recusa('Motivo de recusa obrigatorio');
+      return _recusa(operationId, 'Motivo de recusa obrigatorio');
     }
 
     const novoStatus = aceito === true ? 'Aceita' : 'Recusada';
@@ -2053,22 +2144,22 @@ const FERRAMENTAL_TIPOS_VALIDOS = ['Carga', 'Desmobilizacao'];
 // valor novo depois, e so adicionar na lista e trocar esta linha.
 function registrarMovimentoFerramental(osId, tecnicoId, patrimonioCodigo, tipoMovimento, estadoOk, observacao, operationId, dispositivoId) {
   if (FERRAMENTAL_TIPOS_VALIDOS.indexOf(tipoMovimento) < 0) {
-    return _recusa('Tipo de movimento invalido: ' + tipoMovimento);
+    return _recusa(operationId, 'Tipo de movimento invalido: ' + tipoMovimento);
   }
   if (!patrimonioCodigo || !String(patrimonioCodigo).trim()) {
-    return _recusa('Codigo de patrimonio obrigatorio');
+    return _recusa(operationId, 'Codigo de patrimonio obrigatorio');
   }
   if (tipoMovimento === 'Desmobilizacao' && estadoOk === false && !(observacao && String(observacao).trim())) {
-    return _recusa('Observacao obrigatoria quando o estado nao esta OK');
+    return _recusa(operationId, 'Observacao obrigatoria quando o estado nao esta OK');
   }
 
   const posse = verificarPosseOS(osId, tecnicoId);
-  if (!posse.ok) return _recusa(posse.erro);
+  if (!posse.ok) return _recusa(operationId, posse.erro);
 
   return executarIdempotente(operationId, 'APONTAMENTO', osId, tecnicoId, dispositivoId, () => {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const sheet = ss.getSheetByName('Ferramental_Movimentos');
-    if (!sheet) return _recusa('Aba Ferramental_Movimentos nao encontrada');
+    if (!sheet) return _recusa(operationId, 'Aba Ferramental_Movimentos nao encontrada');
 
     const movimentoId = Utilities.getUuid();
     sheet.appendRow([
@@ -2315,11 +2406,11 @@ function getUltimaOSDoTecnicoDiaAnterior(tecnicoId) {
 // juntos quando exige, e só grava se passou (ou se não havia salto).
 // LIMITAÇÃO CONHECIDA: captura de foto não existe no app ainda —
 // enquanto isso, qualquer salto real fica bloqueado até existir.
-function validarESalvarKMInicial(osId, tecnicoId, kmInicial, veiculoId, justificativaDesvio, fotoDesvioUrl) {
+function validarESalvarKMInicial(osId, tecnicoId, kmInicial, veiculoId, justificativaDesvio, fotoDesvioUrl, operationId) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
-  if (!osRow) return _recusa('OS nao encontrada: ' + osId);
+  if (!osRow) return _recusa(operationId, 'OS nao encontrada: ' + osId);
 
   const kmInicialNum = parseFloat(kmInicial) || 0;
   let flag = '', exigeJustificativa = false, referencia = null, limiar = null, tipoComparacao = '';
@@ -2355,7 +2446,7 @@ function validarESalvarKMInicial(osId, tecnicoId, kmInicial, veiculoId, justific
   if (exigeJustificativa) {
     const mensagem = 'Diferenca de ' + Math.round(kmInicialNum - referencia) + 'km detectada (' + tipoComparacao + '). '
       + 'Informe justificativa por texto E foto do odometro para continuar.';
-    return _recusa(mensagem, { exigeJustificativa: true, mensagem: mensagem });
+    return _recusa(operationId, mensagem, { exigeJustificativa: true, mensagem: mensagem });
   }
 
   const set = (campo, val) => { const col = getCol(campo); if (col) osSheet.getRange(osRow, col).setValue(val); };
@@ -2372,7 +2463,7 @@ function validarESalvarKMInicial(osId, tecnicoId, kmInicial, veiculoId, justific
 // Aditivo: convive com iniciarOSComGeo, não a substitui ainda.
 function iniciarOSComKM(osId, tecnicoId, tecnicoNome, local, lat, lng, kmInicial, veiculoId, justificativaDesvio, fotoDesvioUrl, operationId, dispositivoId) {
   return executarIdempotente(operationId, 'REGISTRO_KM', osId, tecnicoId, dispositivoId, () => {
-    const kmResult = validarESalvarKMInicial(osId, tecnicoId, kmInicial, veiculoId, justificativaDesvio, fotoDesvioUrl);
+    const kmResult = validarESalvarKMInicial(osId, tecnicoId, kmInicial, veiculoId, justificativaDesvio, fotoDesvioUrl, operationId);
     if (kmResult.erro || kmResult.exigeJustificativa) return kmResult;
 
     const localComGeo = (lat && lng) ? ((local ? local + ' ' : '') + '[' + lat + ',' + lng + ']') : (local || '');
@@ -2407,18 +2498,18 @@ function registrarKMFinalPendente(osId, tecnicoId, kmFinal, justificativaDesvio,
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
-  if (!osRow) return _recusa('OS nao encontrada: ' + osId);
+  if (!osRow) return _recusa(operationId, 'OS nao encontrada: ' + osId);
 
   const colStatus = getCol('Status');
   const status = colStatus ? String(osSheet.getRange(osRow, colStatus).getValue()) : '';
-  if (status !== 'Concluída') return _recusa('OS nao esta concluida, KM final nao se aplica ainda');
+  if (status !== 'Concluída') return _recusa(operationId, 'OS nao esta concluida, KM final nao se aplica ainda');
 
   const colKmInicial = getCol('KM_Inicial_OS');
   const kmInicial = colKmInicial ? (parseFloat(osSheet.getRange(osRow, colKmInicial).getValue()) || 0) : 0;
   const kmFinalNum = parseFloat(kmFinal) || 0;
 
   if (kmFinalNum < kmInicial) {
-    return _recusa('KM final nao pode ser menor que o KM inicial desta OS (' + kmInicial + ')');
+    return _recusa(operationId, 'KM final nao pode ser menor que o KM inicial desta OS (' + kmInicial + ')');
   }
 
   const diferenca = kmFinalNum - kmInicial;
@@ -2428,7 +2519,7 @@ function registrarKMFinalPendente(osId, tecnicoId, kmFinal, justificativaDesvio,
     if (!temFoto || !temTexto) {
       const mensagem = 'Trecho de ' + Math.round(diferenca) + 'km dentro desta OS. '
         + 'Informe justificativa por texto E foto do odometro para continuar.';
-      return _recusa(mensagem, { exigeJustificativa: true, mensagem: mensagem });
+      return _recusa(operationId, mensagem, { exigeJustificativa: true, mensagem: mensagem });
     }
   }
 
