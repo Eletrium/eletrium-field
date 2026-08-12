@@ -121,30 +121,118 @@ function gerarSalt() {
 }
 
 // ─── Log_Central / executarIdempotente — Frente D (Diretriz v1.1) ───
-// Schema alinhado de propósito com o que a Frente F (Cowork) definiu
-// pra Log_Central (operation_id, OS_ID, tecnico_id, dispositivo_id,
-// tipo_operacao, criado_em, enviado_em, recebido_em, sincronizado_em,
-// status, tentativas, erro_detalhe) — pra não nascerem dois logs
-// paralelos. `resultado_json` é a coluna extra que a IDEMPOTÊNCIA (não
-// só a observabilidade) precisa: guarda a resposta da primeira execução
-// bem-sucedida, pra devolver a MESMA coisa numa repetição em vez de
-// reexecutar a operação.
-//
-// Status usados aqui (subconjunto do que o outbox do frontend usa):
-// SENDING (linha criada, fn() ainda rodando) -> SYNCED (sucesso,
-// resultado gravado) | SYNC_ERROR (fn() lançou, guarda o motivo — quem
-// decide se tenta de novo é o outbox do frontend, isto aqui só registra).
+// Schema e formatação alinhados byte a byte com a especificação
+// aprovada pelo Geovane/Cowork 2 (12/08) — 13 colunas A-M, ordem exata,
+// larguras, F-I como texto ISO 8601 (NUNCA Date nativo — o Sheets
+// autoconverte e aplica timezone silenciosamente), K como inteiro,
+// 4 validações "Reject input" (status/tipo_operacao/erro_codigo com
+// lista fechada; tentativas com fórmula custom). `resultado_json` é a
+// 13ª coluna, além da spec original do Cowork — é o que a IDEMPOTÊNCIA
+// (não só a observabilidade) precisa: guarda a resposta da primeira
+// execução bem-sucedida, pra devolver a MESMA coisa numa repetição em
+// vez de reexecutar a operação.
+const LOG_CENTRAL_COLUNAS = [
+  { nome: 'operation_id', largura: 220 },
+  { nome: 'OS_ID', largura: 100 },
+  { nome: 'tecnico_id', largura: 100 },
+  { nome: 'dispositivo_id', largura: 160 },
+  { nome: 'tipo_operacao', largura: 160 },
+  { nome: 'criado_em', largura: 160 },
+  { nome: 'enviado_em', largura: 160 },
+  { nome: 'recebido_em', largura: 160 },
+  { nome: 'sincronizado_em', largura: 160 },
+  { nome: 'status', largura: 130 },
+  { nome: 'tentativas', largura: 80 },
+  { nome: 'erro_codigo', largura: 170 },
+  { nome: 'erro_detalhe', largura: 300 },
+];
+// resultado_json fica na 14a coluna (N) -- fora da spec original do
+// Cowork (que vai so ate M/13), aditiva, sem largura/validacao
+// especificada por eles porque e exclusiva da idempotencia backend.
+const LOG_CENTRAL_COL_RESULTADO = 'resultado_json';
+
+const LOG_CENTRAL_STATUS_VALIDOS = ['LOCAL_PENDING', 'QUEUED', 'SENDING', 'RECEIVED', 'SYNCED', 'RECONCILED', 'SYNC_ERROR', 'DIVERGENT'];
+const LOG_CENTRAL_TIPO_OPERACAO_VALIDOS = ['CHECKLIST_RESPOSTA', 'UPLOAD_FOTO', 'ACEITE_CLIENTE', 'REGISTRO_KM', 'APONTAMENTO', 'ASSINATURA', 'REGISTRO_MEDICAO', 'CONCLUSAO_OS'];
+const LOG_CENTRAL_ERRO_CODIGO_VALIDOS = ['TIMEOUT', 'PAYLOAD_INVALIDO', 'CONFLITO_VERSAO', 'PERMISSAO_NEGADA', 'QUOTA_EXCEDIDA', 'CONEXAO_INDISPONIVEL', 'REFERENCIA_INVALIDA', 'DUPLICADO', 'DIVERGENCIA_VALOR', 'DIVERGENCIA_AUSENCIA', 'ERRO_DESCONHECIDO'];
+const LOG_CENTRAL_LINHAS_VALIDACAO = 100000; // teto pragmatico -- validacao aplicada a E2:E100000 etc, nao a coluna infinita
+
 function garantirLogCentral(ss) {
   let sheet = ss.getSheetByName('Log_Central');
-  if (!sheet) {
-    sheet = ss.insertSheet('Log_Central');
-    sheet.getRange(1, 1, 1, 13).setValues([[
-      'operation_id', 'OS_ID', 'tecnico_id', 'dispositivo_id', 'tipo_operacao',
-      'criado_em', 'enviado_em', 'recebido_em', 'sincronizado_em',
-      'status', 'tentativas', 'erro_detalhe', 'resultado_json'
-    ]]);
-  }
+  if (sheet) return sheet;
+
+  sheet = ss.insertSheet('Log_Central');
+  const nomes = LOG_CENTRAL_COLUNAS.map(c => c.nome).concat([LOG_CENTRAL_COL_RESULTADO]);
+  const numCols = nomes.length;
+
+  // 1) cabecalho: negrito + freeze na linha 1.
+  const headerRange = sheet.getRange(1, 1, 1, numCols);
+  headerRange.setValues([nomes]);
+  headerRange.setFontWeight('bold');
+  sheet.setFrozenRows(1);
+
+  // 2) larguras.
+  LOG_CENTRAL_COLUNAS.forEach((c, i) => sheet.setColumnWidth(i + 1, c.largura));
+
+  // 3) CRITICO: F,G,H,I (criado_em/enviado_em/recebido_em/sincronizado_em)
+  // como texto simples ANTES de qualquer dado -- evita o Sheets
+  // autoconverter ISO 8601 em Date com timezone silencioso.
+  ['criado_em', 'enviado_em', 'recebido_em', 'sincronizado_em'].forEach(nome => {
+    const idx = nomes.indexOf(nome) + 1;
+    sheet.getRange(1, idx, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('@');
+  });
+
+  // 4) tentativas (K) como inteiro, 0 casas decimais.
+  const idxTentativasCol = nomes.indexOf('tentativas') + 1;
+  sheet.getRange(1, idxTentativasCol, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('0');
+
+  // 5) validacoes "Reject input", aplicadas de <col>2:<col><teto> em diante.
+  const aplicarListaRejeitando = (nomeCol, valores) => {
+    const idx = nomes.indexOf(nomeCol) + 1;
+    const range = sheet.getRange(2, idx, LOG_CENTRAL_LINHAS_VALIDACAO - 1, 1);
+    const regra = SpreadsheetApp.newDataValidation()
+      .requireValueInList(valores, true)
+      .setAllowInvalid(false)
+      .build();
+    range.setDataValidation(regra);
+  };
+  aplicarListaRejeitando('status', LOG_CENTRAL_STATUS_VALIDOS);
+  aplicarListaRejeitando('tipo_operacao', LOG_CENTRAL_TIPO_OPERACAO_VALIDOS);
+  // erro_codigo: mesma validacao de lista, mas NAO obrigatorio -- a
+  // maioria das linhas fica vazia (so preenche em SYNC_ERROR/DIVERGENT).
+  // requireValueInList com allowInvalid:false ainda aceita celula VAZIA
+  // (reject input so barra valor preenchido fora da lista, nao a ausencia
+  // de valor) -- comportamento nativo do Sheets, sem precisar de regra
+  // separada pra "opcional".
+  aplicarListaRejeitando('erro_codigo', LOG_CENTRAL_ERRO_CODIGO_VALIDOS);
+
+  const idxTentativasValid = nomes.indexOf('tentativas') + 1;
+  const rangeTentativas = sheet.getRange(2, idxTentativasValid, LOG_CENTRAL_LINHAS_VALIDACAO - 1, 1);
+  const regraTentativas = SpreadsheetApp.newDataValidation()
+    .requireFormulaSatisfied('=AND(ISNUMBER(K2), K2>=0, K2=INT(K2))')
+    .setAllowInvalid(false)
+    .build();
+  rangeTentativas.setDataValidation(regraTentativas);
+
   return sheet;
+}
+
+// classificarErroLogCentral: heurística best-effort pra encaixar uma
+// mensagem de erro real (variada, texto livre) num dos 11 códigos
+// fechados aprovados pra erro_codigo. Não é perfeito -- é um
+// classificador por palavra-chave, documentado como tal. Cai em
+// ERRO_DESCONHECIDO quando nada bate, nunca deixa a coluna com valor
+// fora da lista (isso quebraria a validação Reject input).
+function classificarErroLogCentral(mensagem) {
+  const m = String(mensagem || '').toLowerCase();
+  if (/timeout|tempo esgotado/.test(m)) return 'TIMEOUT';
+  if (/quota/.test(m)) return 'QUOTA_EXCEDIDA';
+  if (/permiss|access denied|not authorized|nao autorizad/.test(m)) return 'PERMISSAO_NEGADA';
+  if (/not found|nao encontrad/.test(m)) return 'REFERENCIA_INVALIDA';
+  if (/duplicat|duplicad/.test(m)) return 'DUPLICADO';
+  if (/invalid|invalido|payload/.test(m)) return 'PAYLOAD_INVALIDO';
+  if (/conflict|conflito|version/.test(m)) return 'CONFLITO_VERSAO';
+  if (/network|conexao|connection|unavailable|indispon/.test(m)) return 'CONEXAO_INDISPONIVEL';
+  return 'ERRO_DESCONHECIDO';
 }
 
 // executarIdempotente: todo ponto de escrita crítico (checklist, fotos,
@@ -192,8 +280,11 @@ function executarIdempotente(operationId, tipoOperacao, osId, tecnicoId, disposi
   linha[h.indexOf('tecnico_id')] = tecnicoId || '';
   linha[h.indexOf('dispositivo_id')] = dispositivoId || '';
   linha[h.indexOf('tipo_operacao')] = tipoOperacao || '';
-  linha[h.indexOf('criado_em')] = new Date();
-  linha[h.indexOf('recebido_em')] = new Date();
+  // F/G/H/I sao TEXTO ISO 8601, nunca Date nativo (spec critica —
+  // Date nativo ignora a formatacao '@' da coluna e o Sheets ainda
+  // aplica timezone/serial silenciosamente).
+  linha[h.indexOf('criado_em')] = new Date().toISOString();
+  linha[h.indexOf('recebido_em')] = new Date().toISOString();
   linha[idxStatus] = 'SENDING';
   linha[idxTentativas] = 1;
   log.appendRow(linha);
@@ -205,15 +296,20 @@ function processarEGravarLog(log, linhaNum, headers, fn) {
   const idxResultado = headers.indexOf('resultado_json');
   const idxSinc = headers.indexOf('sincronizado_em');
   const idxErro = headers.indexOf('erro_detalhe');
+  const idxErroCodigo = headers.indexOf('erro_codigo');
   try {
     const resultado = fn();
     log.getRange(linhaNum, idxStatus + 1).setValue('SYNCED');
     log.getRange(linhaNum, idxResultado + 1).setValue(JSON.stringify(resultado));
-    log.getRange(linhaNum, idxSinc + 1).setValue(new Date());
+    // sincronizado_em (coluna I) e TEXTO ISO 8601, nunca Date nativo —
+    // mesma regra critica de criado_em/recebido_em (ver executarIdempotente).
+    log.getRange(linhaNum, idxSinc + 1).setValue(new Date().toISOString());
     return resultado;
   } catch (e) {
+    const mensagem = String((e && e.message) || e);
     log.getRange(linhaNum, idxStatus + 1).setValue('SYNC_ERROR');
-    log.getRange(linhaNum, idxErro + 1).setValue(String((e && e.message) || e));
+    log.getRange(linhaNum, idxErro + 1).setValue(mensagem);
+    if (idxErroCodigo >= 0) log.getRange(linhaNum, idxErroCodigo + 1).setValue(classificarErroLogCentral(mensagem));
     throw e;
   }
 }
@@ -262,7 +358,13 @@ function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArqui
   if (CAMPOS_ARQUIVO_PERMITIDOS.indexOf(campo) < 0) {
     return { sucesso: false, erro: 'Campo nao permitido: ' + campo };
   }
-  return executarIdempotente(operationId, 'ARQUIVO_' + campo, osId, tecnicoId, dispositivoId, () => {
+  // tipo_operacao pro Log_Central (lista fechada aprovada Geovane/Cowork
+  // 2, 12/08): Assinatura_URL bate exato com ASSINATURA. Laudo_URL nao
+  // tem categoria propria na lista aprovada -- aproximado pra UPLOAD_FOTO
+  // (o mais proximo semanticamente: evidencia fotografica/documental
+  // anexada). Sinalizado aqui de proposito, nao escolhido silenciosamente.
+  const tipoOp = campo === 'Assinatura_URL' ? 'ASSINATURA' : 'UPLOAD_FOTO';
+  return executarIdempotente(operationId, tipoOp, osId, tecnicoId, dispositivoId, () => {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const osSheet = ss.getSheetByName('Ordens_Servico');
     const osRow = encontrarLinha(osSheet, osId, 0);
@@ -299,7 +401,13 @@ function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArqui
 const CONFIRMACOES_SEGURANCA_MIN = ['epi', 'aterramento', 'bloqueio_energia', 'sinalizacao_area'];
 
 function confirmarSegurancaPreExecucao(osId, tecnicoId, confirmacoes, temNaoConformidade, operationId, dispositivoId) {
-  return executarIdempotente(operationId, 'SEGURANCA_PRE_EXECUCAO', osId, tecnicoId, dispositivoId, () => {
+  // tipo_operacao pro Log_Central: a lista fechada aprovada (Geovane/
+  // Cowork 2, 12/08) nao tem categoria propria pra "confirmacao de
+  // seguranca" -- aproximado pra CHECKLIST_RESPOSTA (o mais proximo
+  // semanticamente: e literalmente o degrau interim que antecede o
+  // motor de checklist de verdade). Sinalizado aqui, nao escolhido
+  // silenciosamente -- vale confirmar com o dono se cabe.
+  return executarIdempotente(operationId, 'CHECKLIST_RESPOSTA', osId, tecnicoId, dispositivoId, () => {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const osSheet = ss.getSheetByName('Ordens_Servico');
     const osRow = encontrarLinha(osSheet, osId, 0);
@@ -341,7 +449,11 @@ function confirmarSegurancaPreExecucao(osId, tecnicoId, confirmacoes, temNaoConf
 const EPI_ITENS_MIN = ['capacete', 'luvas_isolantes', 'oculos_protecao', 'calcado_seguranca', 'cinto_seguranca'];
 
 function salvarSelfieEPI(osId, tecnicoId, base64Selfie, mimeType, epiChecklist, diarioTexto, operationId, dispositivoId) {
-  return executarIdempotente(operationId, 'SELFIE_EPI', osId, tecnicoId, dispositivoId, () => {
+  // tipo_operacao pro Log_Central: sem categoria propria "selfie" na
+  // lista aprovada -- aproximado pra UPLOAD_FOTO (a selfie e uma foto;
+  // EPI/diario sao dados secundarios na mesma chamada). Sinalizado, nao
+  // escolhido silenciosamente.
+  return executarIdempotente(operationId, 'UPLOAD_FOTO', osId, tecnicoId, dispositivoId, () => {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const osSheet = ss.getSheetByName('Ordens_Servico');
     const osRow = encontrarLinha(osSheet, osId, 0);
@@ -1324,7 +1436,7 @@ function lerAbaCompleta(nomeAba) {
 // geraNC = true se a opcao escolhida tem Aciona_NC = true.
 function salvarResposta(osId, idSharePointOS, perguntaId, textoPergunta,
                         resposta, fotoUrl, tecnico, geraNC, operationId, dispositivoId) {
-  return executarIdempotente(operationId, 'CHECKLIST', osId, tecnico, dispositivoId, () => {
+  return executarIdempotente(operationId, 'CHECKLIST_RESPOSTA', osId, tecnico, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const respSheet = ss.getSheetByName('Checklist_Respostas');
   if (!respSheet) return { erro: 'Aba Checklist_Respostas nao encontrada' };
@@ -1607,7 +1719,7 @@ function validarESalvarKMInicial(osId, tecnicoId, kmInicial, veiculoId, justific
 // ─── iniciarOSComKM ────────────────────────────────────────────────
 // Aditivo: convive com iniciarOSComGeo, não a substitui ainda.
 function iniciarOSComKM(osId, tecnicoId, tecnicoNome, local, lat, lng, kmInicial, veiculoId, justificativaDesvio, fotoDesvioUrl, operationId, dispositivoId) {
-  return executarIdempotente(operationId, 'KM', osId, tecnicoId, dispositivoId, () => {
+  return executarIdempotente(operationId, 'REGISTRO_KM', osId, tecnicoId, dispositivoId, () => {
     const kmResult = validarESalvarKMInicial(osId, tecnicoId, kmInicial, veiculoId, justificativaDesvio, fotoDesvioUrl);
     if (kmResult.erro || kmResult.exigeJustificativa) return kmResult;
 
@@ -1626,7 +1738,7 @@ function iniciarOSComKM(osId, tecnicoId, tecnicoNome, local, lat, lng, kmInicial
 // chamador antigo sem esses 2 args continua funcionando, só sem
 // idempotencia). Ver bloco executarIdempotente/Log_Central (Frente D).
 function encerrarOSComKM(osId, tecnicoId, tecnicoNome, dadosEnc, lat, lng, operationId, dispositivoId) {
-  return executarIdempotente(operationId, 'CONCLUSAO', osId, tecnicoId, dispositivoId, () => {
+  return executarIdempotente(operationId, 'CONCLUSAO_OS', osId, tecnicoId, dispositivoId, () => {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     if (lat && lng) {
       registrarSegmento(ss, osId, tecnicoId, tecnicoNome, 'GPS_Saida', new Date(), 0, 0, '[' + lat + ',' + lng + ']');
@@ -1639,7 +1751,7 @@ function encerrarOSComKM(osId, tecnicoId, tecnicoNome, dadosEnc, lat, lng, opera
 // Preenche o KM final de uma OS já concluída, sem reabrir nada.
 // Roda a mesma validacao de desvio (foto+texto) que o KM inicial usa.
 function registrarKMFinalPendente(osId, tecnicoId, kmFinal, justificativaDesvio, fotoDesvioUrl, operationId, dispositivoId) {
-  return executarIdempotente(operationId, 'KM', osId, tecnicoId, dispositivoId, () => {
+  return executarIdempotente(operationId, 'REGISTRO_KM', osId, tecnicoId, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
