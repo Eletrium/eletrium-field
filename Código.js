@@ -201,17 +201,50 @@ const LOG_CENTRAL_COLUNAS = [
 // especificada por eles porque e exclusiva da idempotencia backend.
 const LOG_CENTRAL_COL_RESULTADO = 'resultado_json';
 
+// Log_Central vira Outbox operacional (ARQUITETURA-SYNC-LOG-CENTRAL.md,
+// decisao do auditor, pontos 2-4) -- 3 colunas novas, APOS resultado_json
+// (nao mexe na ordem A-M ja aprovada). entity_type/entity_id/
+// entity_version dao pro Make.com (1A/1F) rotear por tipo de mutacao e
+// detectar eventos fora de ordem/perdidos via a versao monotonica.
+const LOG_CENTRAL_COLUNAS_OUTBOX = [
+  { nome: 'entity_type', largura: 140 },
+  { nome: 'entity_id', largura: 200 },
+  { nome: 'entity_version', largura: 110 },
+];
+
 const LOG_CENTRAL_STATUS_VALIDOS = ['LOCAL_PENDING', 'QUEUED', 'SENDING', 'RECEIVED', 'SYNCED', 'RECONCILED', 'SYNC_ERROR', 'DIVERGENT'];
 const LOG_CENTRAL_TIPO_OPERACAO_VALIDOS = ['CHECKLIST_RESPOSTA', 'UPLOAD_FOTO', 'ACEITE_CLIENTE', 'REGISTRO_KM', 'APONTAMENTO', 'ASSINATURA', 'REGISTRO_MEDICAO', 'CONCLUSAO_OS'];
 const LOG_CENTRAL_ERRO_CODIGO_VALIDOS = ['TIMEOUT', 'PAYLOAD_INVALIDO', 'CONFLITO_VERSAO', 'PERMISSAO_NEGADA', 'QUOTA_EXCEDIDA', 'CONEXAO_INDISPONIVEL', 'REFERENCIA_INVALIDA', 'DUPLICADO', 'DIVERGENCIA_VALOR', 'DIVERGENCIA_AUSENCIA', 'ERRO_DESCONHECIDO'];
 const LOG_CENTRAL_LINHAS_VALIDACAO = 100000; // teto pragmatico -- validacao aplicada a E2:E100000 etc, nao a coluna infinita
 
+// entity_type: 6 destinos de roteamento do ponto 6 do auditor (estado da
+// OS + fotos/checklist/assinatura/medicao/apontamentos). Mapeamento
+// tipo_operacao -> entity_type documentado em ARQUITETURA-SYNC-LOG-
+// CENTRAL.md -- ACEITE_CLIENTE mapeado pra OS_ESTADO por nao ter destino
+// proprio nos 6 pontos do auditor (ambiguo, sinalizado no doc).
+const LOG_CENTRAL_ENTITY_TYPE_VALIDOS = ['OS_ESTADO', 'FOTO', 'CHECKLIST', 'ASSINATURA', 'MEDICAO', 'APONTAMENTO'];
+const TIPO_OPERACAO_PARA_ENTITY_TYPE = {
+  CONCLUSAO_OS: 'OS_ESTADO',
+  REGISTRO_KM: 'OS_ESTADO',
+  ACEITE_CLIENTE: 'OS_ESTADO',
+  APONTAMENTO: 'APONTAMENTO',
+  CHECKLIST_RESPOSTA: 'CHECKLIST',
+  UPLOAD_FOTO: 'FOTO',
+  ASSINATURA: 'ASSINATURA',
+  REGISTRO_MEDICAO: 'MEDICAO',
+};
+
 function garantirLogCentral(ss) {
   let sheet = ss.getSheetByName('Log_Central');
-  if (sheet) return sheet;
+  if (sheet) {
+    _garantirColunasOutboxLogCentral(sheet);
+    return sheet;
+  }
 
   sheet = ss.insertSheet('Log_Central');
-  const nomes = LOG_CENTRAL_COLUNAS.map(c => c.nome).concat([LOG_CENTRAL_COL_RESULTADO]);
+  const nomes = LOG_CENTRAL_COLUNAS.map(c => c.nome)
+    .concat([LOG_CENTRAL_COL_RESULTADO])
+    .concat(LOG_CENTRAL_COLUNAS_OUTBOX.map(c => c.nome));
   const numCols = nomes.length;
 
   // 1) cabecalho: negrito + freeze na linha 1.
@@ -222,6 +255,8 @@ function garantirLogCentral(ss) {
 
   // 2) larguras.
   LOG_CENTRAL_COLUNAS.forEach((c, i) => sheet.setColumnWidth(i + 1, c.largura));
+  const offsetOutbox = LOG_CENTRAL_COLUNAS.length + 2; // +1 pula pra depois de A-M, +1 pula resultado_json (14a coluna)
+  LOG_CENTRAL_COLUNAS_OUTBOX.forEach((c, i) => sheet.setColumnWidth(offsetOutbox + i, c.largura));
 
   // 3) CRITICO: F,G,H,I (criado_em/enviado_em/recebido_em/sincronizado_em)
   // como texto simples ANTES de qualquer dado -- evita o Sheets
@@ -254,6 +289,7 @@ function garantirLogCentral(ss) {
   // de valor) -- comportamento nativo do Sheets, sem precisar de regra
   // separada pra "opcional".
   aplicarListaRejeitando('erro_codigo', LOG_CENTRAL_ERRO_CODIGO_VALIDOS);
+  aplicarListaRejeitando('entity_type', LOG_CENTRAL_ENTITY_TYPE_VALIDOS);
 
   const idxTentativasValid = nomes.indexOf('tentativas') + 1;
   const rangeTentativas = sheet.getRange(2, idxTentativasValid, LOG_CENTRAL_LINHAS_VALIDACAO - 1, 1);
@@ -263,7 +299,28 @@ function garantirLogCentral(ss) {
     .build();
   rangeTentativas.setDataValidation(regraTentativas);
 
+  // 6) entity_version como inteiro, mesmo tratamento de tentativas.
+  const idxVersaoCol = nomes.indexOf('entity_version') + 1;
+  sheet.getRange(1, idxVersaoCol, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('0');
+
   return sheet;
+}
+
+// _garantirColunasOutboxLogCentral -- idempotente, mesmo padrao das
+// outras colunas novas do projeto (setupSheets): se Log_Central ja foi
+// criado ANTES desta rodada (schema sem entity_type/entity_id/
+// entity_version), adiciona as 3 colunas no final sem mexer no resto.
+function _garantirColunasOutboxLogCentral(sheet) {
+  const lastCol = sheet.getLastColumn();
+  const headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  LOG_CENTRAL_COLUNAS_OUTBOX.forEach(c => {
+    if (!headers.includes(c.nome)) {
+      const nextCol = sheet.getLastColumn() + 1;
+      sheet.getRange(1, nextCol).setValue(c.nome);
+      sheet.setColumnWidth(nextCol, c.largura);
+      if (c.nome === 'entity_version') sheet.getRange(1, nextCol, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('0');
+    }
+  });
 }
 
 // classificarErroLogCentral: heurística best-effort pra encaixar uma
@@ -285,13 +342,70 @@ function classificarErroLogCentral(mensagem) {
   return 'ERRO_DESCONHECIDO';
 }
 
+// _comLockDeOS -- LockService.getScriptLock() (ARQUITETURA-SYNC-LOG-
+// CENTRAL.md, ponto 3). Apps Script nao tem lock nativo por chave
+// arbitraria (nao da pra travar "so a OS-123") -- a unica API real e
+// script-inteiro/documento-inteiro. Serializa TODAS as operacoes
+// criticas entre si, nao so as da mesma OS -- limitacao real, aceitavel
+// no volume de uso do PWA, documentada no arquivo acima. Se o lock nao
+// e obtido dentro do timeout, fn() NAO roda e nada e gravado em
+// Log_Central (evita poluir o log com uma tentativa que nunca
+// aconteceu) -- retry do MESMO operationId tenta de novo do zero, sem
+// violar idempotencia.
+const LOCK_TIMEOUT_MS = 10000;
+
+function _comLockDeOS(fn) {
+  const lock = LockService.getScriptLock();
+  const obtido = lock.tryLock(LOCK_TIMEOUT_MS);
+  if (!obtido) {
+    return _recusa('Sistema ocupado, tente novamente em instantes');
+  }
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// _proximaVersaoEntidadeOS -- maior entity_version ja gravado em
+// Log_Central pra este OS_ID, +1 (ou 1 se nenhum ainda). SO deve ser
+// chamada de dentro de _comLockDeOS -- ler-incrementar fora do lock e
+// exatamente a corrida que o ponto 3 do auditor pede pra fechar.
+function _proximaVersaoEntidadeOS(osId) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const log = garantirLogCentral(ss);
+  const dados = log.getDataRange().getValues();
+  const h = dados[0];
+  const idxOS = h.indexOf('OS_ID');
+  const idxVersao = h.indexOf('entity_version');
+  let maior = 0;
+  for (let i = 1; i < dados.length; i++) {
+    if (String(dados[i][idxOS]) !== String(osId)) continue;
+    const v = parseInt(dados[i][idxVersao]) || 0;
+    if (v > maior) maior = v;
+  }
+  return maior + 1;
+}
+
 // executarIdempotente: todo ponto de escrita crítico (checklist, fotos,
 // aceite, KM, apontamentos, assinatura, medição, conclusão) deveria
 // passar por aqui. Sem operationId, comportamento antigo preservado
 // (roda fn() direto, sem dedup) — compatibilidade retroativa com
 // chamadores ainda não migrados.
-function executarIdempotente(operationId, tipoOperacao, osId, tecnicoId, dispositivoId, fn) {
+//
+// `entidade` (opcional, {tipo, id}) -- ARQUITETURA-SYNC-LOG-CENTRAL.md,
+// ponto 2/6. Sem ele, entity_type e derivado de tipoOperacao (mapeamento
+// TIPO_OPERACAO_PARA_ENTITY_TYPE) e entity_id vira o proprio osId --
+// suficiente pras mutacoes de estado da OS. Chamadores que escrevem
+// mais de uma "coisa" na mesma OS (fotos: Laudo_URL vs Selfie_URL;
+// checklist: fase ou pergunta) passam `entidade.id` explicito
+// (osId + ':' + algo) pra nao colidir entity_id entre eventos
+// genuinamente diferentes da mesma OS.
+function executarIdempotente(operationId, tipoOperacao, osId, tecnicoId, dispositivoId, fn, entidade) {
   if (!operationId) return fn();
+
+  const entityType = (entidade && entidade.tipo) || TIPO_OPERACAO_PARA_ENTITY_TYPE[tipoOperacao] || '';
+  const entityId = (entidade && entidade.id) || osId || '';
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const log = garantirLogCentral(ss);
@@ -317,28 +431,49 @@ function executarIdempotente(operationId, tipoOperacao, osId, tecnicoId, disposi
       }
     }
     // Existe mas não SYNCED (tentativa anterior deu erro) — reprocessa.
-    const tentativaAtual = (parseInt(dados[i][idxTentativas]) || 0) + 1;
-    log.getRange(i + 1, idxTentativas + 1).setValue(tentativaAtual);
-    log.getRange(i + 1, idxStatus + 1).setValue('SENDING');
-    return processarEGravarLog(log, i + 1, h, fn);
+    // MESMA entity_version da tentativa original (retry nao e evento
+    // novo) -- so a gravacao de fn()+Log_Central roda sob lock.
+    return _comLockDeOS(() => {
+      const tentativaAtual = (parseInt(dados[i][idxTentativas]) || 0) + 1;
+      log.getRange(i + 1, idxTentativas + 1).setValue(tentativaAtual);
+      log.getRange(i + 1, idxStatus + 1).setValue('SENDING');
+      return processarEGravarLog(log, i + 1, h, fn);
+    });
   }
 
-  // Primeira vez que este operation_id aparece.
-  const linha = new Array(h.length).fill('');
-  linha[idxOpId] = operationId;
-  linha[h.indexOf('OS_ID')] = osId || '';
-  linha[h.indexOf('tecnico_id')] = tecnicoId || '';
-  linha[h.indexOf('dispositivo_id')] = dispositivoId || '';
-  linha[h.indexOf('tipo_operacao')] = tipoOperacao || '';
-  // F/G/H/I sao TEXTO ISO 8601, nunca Date nativo (spec critica —
-  // Date nativo ignora a formatacao '@' da coluna e o Sheets ainda
-  // aplica timezone/serial silenciosamente).
-  linha[h.indexOf('criado_em')] = new Date().toISOString();
-  linha[h.indexOf('recebido_em')] = new Date().toISOString();
-  linha[idxStatus] = 'SENDING';
-  linha[idxTentativas] = 1;
-  log.appendRow(linha);
-  return processarEGravarLog(log, log.getLastRow(), h, fn);
+  // Primeira vez que este operation_id aparece -- sob lock: ler versao
+  // atual -> incrementar -> gravar entidade (fn(), dentro de
+  // processarEGravarLog) -> gravar Log_Central -> liberar lock. Isto
+  // fecha o cenario real "entidade alterada + Log_Central falhou": se a
+  // gravacao do Log_Central falhasse DEPOIS de fn() ja ter rodado, um
+  // retry da MESMA operationId reexecutaria fn() de novo (idempotencia
+  // quebrada, sem registro de que ja tinha rodado); com as duas escritas
+  // na MESMA tentativa sob o mesmo lock, um erro no meio propaga pro
+  // chamador (nao fica um operation_id "orfao" sem rastro nenhum).
+  return _comLockDeOS(() => {
+    const versao = _proximaVersaoEntidadeOS(osId);
+    const linha = new Array(h.length).fill('');
+    linha[idxOpId] = operationId;
+    linha[h.indexOf('OS_ID')] = osId || '';
+    linha[h.indexOf('tecnico_id')] = tecnicoId || '';
+    linha[h.indexOf('dispositivo_id')] = dispositivoId || '';
+    linha[h.indexOf('tipo_operacao')] = tipoOperacao || '';
+    // F/G/H/I sao TEXTO ISO 8601, nunca Date nativo (spec critica —
+    // Date nativo ignora a formatacao '@' da coluna e o Sheets ainda
+    // aplica timezone/serial silenciosamente).
+    linha[h.indexOf('criado_em')] = new Date().toISOString();
+    linha[h.indexOf('recebido_em')] = new Date().toISOString();
+    linha[idxStatus] = 'SENDING';
+    linha[idxTentativas] = 1;
+    const idxEntityType = h.indexOf('entity_type');
+    const idxEntityId = h.indexOf('entity_id');
+    const idxEntityVersion = h.indexOf('entity_version');
+    if (idxEntityType >= 0) linha[idxEntityType] = entityType;
+    if (idxEntityId >= 0) linha[idxEntityId] = entityId;
+    if (idxEntityVersion >= 0) linha[idxEntityVersion] = versao;
+    log.appendRow(linha);
+    return processarEGravarLog(log, log.getLastRow(), h, fn);
+  });
 }
 
 function processarEGravarLog(log, linhaNum, headers, fn) {
@@ -422,6 +557,11 @@ function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArqui
   // (o mais proximo semanticamente: evidencia fotografica/documental
   // anexada). Sinalizado aqui de proposito, nao escolhido silenciosamente.
   const tipoOp = campo === 'Assinatura_URL' ? 'ASSINATURA' : 'UPLOAD_FOTO';
+  // entity_id inclui o campo (nao so osId) -- uma OS pode ter mais de um
+  // UPLOAD_FOTO (Laudo_URL, e via salvarSelfieEPI a selfie tambem cai
+  // aqui) na mesma OS; sem o campo no entity_id os dois colidiriam no
+  // mesmo par (entity_type=FOTO, entity_id=OS_ID), indistinguivel pro
+  // consumidor do Outbox (ARQUITETURA-SYNC-LOG-CENTRAL.md).
   return executarIdempotente(operationId, tipoOp, osId, tecnicoId, dispositivoId, () => {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const osSheet = ss.getSheetByName('Ordens_Servico');
@@ -440,7 +580,7 @@ function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArqui
 
     osSheet.getRange(osRow, col).setValue(url);
     return { sucesso: true, url: url, campo: campo };
-  });
+  }, { tipo: tipoOp === 'ASSINATURA' ? 'ASSINATURA' : 'FOTO', id: osId + ':' + campo });
 }
 
 // ─── confirmarSegurancaPreExecucao — Frente B (fatia prioritaria) ────
@@ -560,7 +700,10 @@ function salvarSelfieEPI(osId, tecnicoId, base64Selfie, mimeType, epiChecklist, 
       // nao gate de nada; informativo pro tecnico ver se ja esta elegivel.
       elegivelFinanceiro: !!selfieAtual && diarioPreenchido
     };
-  });
+  // entity_id distingue a selfie do Laudo_URL (tambem UPLOAD_FOTO na
+  // mesma OS via salvarArquivoOS) -- mesmo motivo do campo no entity_id
+  // de salvarArquivoOS.
+  }, { tipo: 'FOTO', id: osId + ':Selfie_URL' });
 }
 
 // ─── getCol ───────────────────────────────────────────────────────
@@ -1585,7 +1728,9 @@ function salvarResposta(osId, idSharePointOS, perguntaId, textoPergunta,
     false  // Sincronizado — Make.com 1F vai setar true
   ]);
   return { sucesso: true };
-  });
+  // entity_id inclui a pergunta -- cada resposta e um evento distinto na
+  // mesma OS, colidiriam em (CHECKLIST, OS_ID) sem isso.
+  }, { tipo: 'CHECKLIST', id: osId + ':' + perguntaId });
 }
 
 // ─── fecharFaseChecklist — Checklist 3 fases (Diretriz v1.1) ────────
@@ -1682,7 +1827,10 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
     }
 
     return { sucesso: true, completa: true, fase: fase };
-  });
+  // entity_id inclui a fase -- Pre-Execucao/Execucao/Pos-Execucao sao
+  // eventos distintos na mesma OS, colidiriam em (CHECKLIST, OS_ID) sem
+  // isso.
+  }, { tipo: 'CHECKLIST', id: osId + ':' + fase });
 }
 
 // ─── consultarFaseChecklist — leitura pontual (Diretriz v1.1) ───────
@@ -1818,23 +1966,35 @@ function getOfertaAlocacao(ofertaId, tecnicoId, exp, sig) {
 // um cliente aceitando algo, mas e a categoria mais proxima da lista
 // aprovada; sinalizado, nao escolhido silenciosamente).
 function registrarAceiteOferta(ofertaId, tecnicoId, aceito, motivoRecusa, operationId, dispositivoId) {
-  return executarIdempotente(operationId, 'ACEITE_CLIENTE', ofertaId, tecnicoId, dispositivoId, () => {
-    const ss = SpreadsheetApp.openById(SHEET_ID);
-    const sheet = ss.getSheetByName('Alocacoes_Ofertas');
-    if (!sheet) return _recusa('Aba Alocacoes_Ofertas nao encontrada');
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName('Alocacoes_Ofertas');
+  if (!sheet) return _recusa('Aba Alocacoes_Ofertas nao encontrada');
 
+  const ultimaPre = _ultimaLinhaOferta(sheet, ofertaId);
+  if (!ultimaPre) return _recusa('Oferta nao encontrada: ' + ofertaId);
+  const gPre = (campo) => ultimaPre.valores[ultimaPre.headers.indexOf(campo)];
+
+  if (String(gPre('Tecnico_ID')) !== String(tecnicoId)) {
+    return _recusa('Tecnico ' + tecnicoId + ' nao tem posse desta oferta');
+  }
+
+  // OS_ID real da oferta -- lido ANTES de executarIdempotente pra
+  // entity_version (monotonico POR OS, ARQUITETURA-SYNC-LOG-CENTRAL.md,
+  // ponto 3) usar a chave certa. Corrige compromisso documentado na
+  // entrega anterior desta fatia, que usava ofertaId no lugar do OS_ID
+  // real por nao ter esta leitura prévia ainda.
+  const osIdReal = gPre('OS_ID');
+
+  return executarIdempotente(operationId, 'ACEITE_CLIENTE', osIdReal, tecnicoId, dispositivoId, () => {
+    // Releitura fresca -- protege contra corrida com outra resposta ja
+    // registrada por uma operation_id DIFERENTE entre o precheck acima e
+    // esta gravacao (retry da MESMA operation_id nunca chega aqui,
+    // executarIdempotente ja devolveu o resultado cacheado antes de
+    // rodar este fn() de novo).
     const ultima = _ultimaLinhaOferta(sheet, ofertaId);
     if (!ultima) return _recusa('Oferta nao encontrada: ' + ofertaId);
     const g = (campo) => ultima.valores[ultima.headers.indexOf(campo)];
 
-    if (String(g('Tecnico_ID')) !== String(tecnicoId)) {
-      return _recusa('Tecnico ' + tecnicoId + ' nao tem posse desta oferta');
-    }
-
-    // Revalida Pendente na hora de gravar -- protege contra corrida com
-    // outra resposta ja registrada por uma operation_id DIFERENTE (retry
-    // da MESMA operation_id nunca chega aqui, executarIdempotente ja
-    // devolveu o resultado cacheado antes de rodar este fn() de novo).
     if (g('Status') !== 'Pendente') {
       return _recusa('Oferta ja foi respondida', { status: g('Status') });
     }
