@@ -426,21 +426,52 @@ function executarIdempotente(operationId, tipoOperacao, osId, tecnicoId, disposi
   for (let i = 1; i < dados.length; i++) {
     if (String(dados[i][idxOpId]) !== String(operationId)) continue;
 
-    if (dados[i][idxStatus] === 'SYNCED') {
-      // Já processado com sucesso — devolve o MESMO resultado gravado,
-      // NÃO roda fn() de novo. Isso é o que torna isto idempotência de
-      // verdade, não só "melhor esforço".
+    // Achado #1 (Geovane, revisao do T-LOG-02): reconhecer SO
+    // status===SYNCED como "ja processado" deixava uma linha presa em
+    // erro mesmo apos fn() ja ter rodado com SUCESSO (T-LOG-02: mutacao
+    // OK, so a escrita do status falhou) cair no "reprocessa",
+    // reexecutando fn() INTEIRA de novo -- duplicando linha nas funcoes
+    // appendRow. Fix: com resultado_json valido (PROVA de que fn() rodou
+    // e o que ela devolveu), NUNCA reexecuta -- devolve o cache, auto-
+    // curando o status pra refletir o desfecho real (SYNCED se sucesso,
+    // ou o status que o proprio resultado carrega se for uma recusa
+    // canonica -- ver processarEGravarLog).
+    //
+    // Achado #2 (Geovane, revisao do proprio fix acima, MESMO DIA):
+    // bloquear reexecucao tambem quando NAO HA resultado_json (T-LOG-01:
+    // fn() genuinamente nunca completou) quebrava o retry automatico de
+    // SYNC_ERROR de verdade -- o outbox do frontend (processarFilaOffline,
+    // eletrium-field/index.html) reenvia com o MESMO operationId em todo
+    // ciclo de backoff (confirmado por leitura do codigo real), esperando
+    // que uma nova tentativa RODE fn() de novo. Sem resultado_json nao ha
+    // NADA que poderia ser duplicado (fn() nunca produziu nada) -- entao
+    // e seguro, e necessario, reexecutar. So o caso COM resultado_json
+    // (mutacao PROVADAMENTE completa) bloqueia reexecucao.
+    const resultadoBruto = dados[i][idxResultado];
+    if (resultadoBruto) {
       try {
-        return JSON.parse(dados[i][idxResultado]);
+        const cache = JSON.parse(resultadoBruto);
+        const statusReal = (cache && cache.success === false && cache.status) ? cache.status : 'SYNCED';
+        if (dados[i][idxStatus] !== statusReal) {
+          try {
+            log.getRange(i + 1, idxStatus + 1).setValue(statusReal);
+            const idxSincAutoCura = h.indexOf('sincronizado_em');
+            if (idxSincAutoCura >= 0) log.getRange(i + 1, idxSincAutoCura + 1).setValue(new Date().toISOString());
+          } catch (eCura) {
+            // melhor esforco -- uma falha aqui nao impede devolver o
+            // resultado cacheado, que e o que realmente importa.
+          }
+        }
+        return cache;
       } catch (eParse) {
-        // resultado salvo corrompido (não deveria acontecer) — cai pro
-        // reprocessamento abaixo em vez de travar o técnico pra sempre.
+        // resultado corrompido -- trata como se nao existisse, cai pro
+        // reprocessamento abaixo (mais seguro que devolver lixo).
       }
     }
-    // Existe mas não SYNCED (tentativa anterior deu erro) — reprocessa.
-    // MESMA entity_version da tentativa original (retry nao e evento
-    // novo). Reserva (incrementar tentativas, marcar SENDING) e rapida,
-    // sob lock; fn() roda DEPOIS, fora do lock.
+
+    // Sem resultado_json utilizavel -- fn() nunca completou. Reserva
+    // rapida (incrementa tentativas, marca SENDING) sob lock; fn() roda
+    // DEPOIS, fora do lock (ajuste 4).
     const linhaNum = i + 1;
     const reserva = _comLockDeOS(() => {
       const tentativaAtual = (parseInt(dados[i][idxTentativas]) || 0) + 1;
@@ -520,20 +551,40 @@ function processarEGravarLog(log, linhaNum, headers, fn, operationId) {
     return _recusa(operationId, mensagem, { error_code: codigo, retryable: true, status: 'SYNC_ERROR' });
   }
 
+  // Achado adjacente (revisao do retry de SYNC_ERROR, mesmo dia): fn()
+  // pode devolver uma recusa canonica SEM lancar excecao (ex.:
+  // confirmarSegurancaPreExecucao com confirmacoes incompletas,
+  // fecharFaseChecklist com fase invalida) -- isso e um retorno normal,
+  // nao cai no catch acima. `_sucesso` ja preserva os campos de
+  // resultadoFn quando ele e um _recusa() (Object.assign da preferencia
+  // pro resultado sobre os defaults), entao `envelope.status` ja reflete
+  // corretamente DIVERGENT/etc -- mas a ESCRITA na planilha usava
+  // 'SYNCED' fixo, nao o status real. Corrigido: usa envelope.status.
   const envelope = _sucesso(operationId, resultadoFn);
+  // Ordem de escrita deliberada (Geovane, achado de integracao):
+  // resultado_json e o sinal de "mutacao completou" que
+  // executarIdempotente usa pra decidir se um retry pode reexecutar
+  // fn() -- grava-lo PRIMEIRO (antes de status/sincronizado_em) reduz a
+  // janela onde um erro DEPOIS de fn() ja ter rodado deixaria essa prova
+  // sem existir. Nao elimina o residual por completo (a propria escrita
+  // de resultado_json ainda pode falhar) -- mas reduz de "qualquer uma
+  // de 3 escritas falhar" pra "essa 1 escrita especifica falhar".
   try {
-    log.getRange(linhaNum, idxStatus + 1).setValue('SYNCED');
     log.getRange(linhaNum, idxResultado + 1).setValue(JSON.stringify(envelope));
+    log.getRange(linhaNum, idxStatus + 1).setValue(envelope.status || 'SYNCED');
     // sincronizado_em (coluna I) e TEXTO ISO 8601, nunca Date nativo —
     // mesma regra critica de criado_em/recebido_em.
     log.getRange(linhaNum, idxSinc + 1).setValue(new Date().toISOString());
     return envelope;
   } catch (eLog) {
     // T-LOG-02 -- resultadoFn existe, a mutacao ja aconteceu de verdade.
+    // resultado_json PRIMEIRO de novo aqui (pode ter sido exatamente essa
+    // escrita que lancou a excecao acima) -- e o sinal que mais importa
+    // salvar, mesmo que status/erro_detalhe nao consigam.
     const mensagemLog = String((eLog && eLog.message) || eLog);
+    try { log.getRange(linhaNum, idxResultado + 1).setValue(JSON.stringify(envelope)); } catch (e2) {}
     try { log.getRange(linhaNum, idxStatus + 1).setValue('SYNC_ERROR'); } catch (e2) {}
     try { log.getRange(linhaNum, idxErro + 1).setValue('Mutacao OK, falha ao registrar SYNCED: ' + mensagemLog); } catch (e2) {}
-    try { log.getRange(linhaNum, idxResultado + 1).setValue(JSON.stringify(envelope)); } catch (e2) {}
     return Object.assign({}, envelope, { log_sync_warning: mensagemLog });
   }
 }
