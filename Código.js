@@ -7,6 +7,7 @@
 
 const SHEET_ID = '1XjMXQKjfcvdxQLj3M6InIH50OfMbzj03uJR5Jx46AvI';
 const TZ = 'GMT-3';
+const OS_LINHAS_FORMATACAO = 20000; // teto pragmatico pra pre-formatar colunas de texto critico em Ordens_Servico (ex.: SP_Sincronizado_Em), mesmo padrao do LOG_CENTRAL_LINHAS_VALIDACAO
 
 // ─── servirPWADireto: serve o PWA embarcado no Apps Script ──────────
 // RENOMEADA de doGet() em 10/08/2026 — colidia com o doGet(e) real de
@@ -58,7 +59,17 @@ function setupSheets() {
       // de frontend) — sinal de que a Fase 2 (Execucao) foi fechada de
       // verdade no servidor. Escrito por fecharFaseChecklist(), lido como
       // 5o motivo de bloqueio em canCloseOS.
-      'Checklist_Execucao_Completo'
+      'Checklist_Execucao_Completo',
+      // Protecao anti-sobrescrita do 1B (DESENHO-1B-ANTI-SOBRESCRITA.md,
+      // aprovado 13/08) -- watermark do lado SharePoint: guarda o valor
+      // de `Modified` do item do SharePoint no momento em que o 1B
+      // aplicou a ultima edicao administrativa (Title/Cliente/Tecnico/
+      // Descricao/Criticidade/datas), nao a hora em que o Make rodou.
+      // "Mais novo vence": 1B so aplica um updateRow se Modified (SP) for
+      // mais recente que este valor. Escrito pelo 1B (Make), nao por
+      // este codigo -- Apps Script so garante a coluna existir e com o
+      // formato de texto critico (ver bloco de formatacao abaixo).
+      'SP_Sincronizado_Em'
     ];
     novos.forEach(campo => {
       if (!existingHeaders.includes(campo)) {
@@ -66,6 +77,18 @@ function setupSheets() {
         osSheet.getRange(1, nextCol).setValue(campo);
       }
     });
+
+    // SP_Sincronizado_Em como texto simples ('@'), nunca Date nativo --
+    // mesma regra critica das colunas de tempo do Log_Central (o Sheets
+    // autoconverte ISO 8601 em Date com timezone silencioso senao). O
+    // valor e um timestamp de ORIGEM (Modified do SharePoint) escrito
+    // pelo 1B via Make, comparado como string ISO -- uma conversao
+    // silenciosa quebraria a comparacao "mais novo vence".
+    const headersAposNovos = osSheet.getRange(1, 1, 1, osSheet.getLastColumn()).getValues()[0];
+    const idxSpSync = headersAposNovos.indexOf('SP_Sincronizado_Em');
+    if (idxSpSync >= 0) {
+      osSheet.getRange(1, idxSpSync + 1, OS_LINHAS_FORMATACAO, 1).setNumberFormat('@');
+    }
   }
 
   if (!ss.getSheetByName('OS_Segmentos')) {
