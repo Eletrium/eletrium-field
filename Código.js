@@ -2010,6 +2010,29 @@ function salvarResposta(osId, idSharePointOS, perguntaId, textoPergunta,
 // escritas criticas -- esta e uma escrita nova, nao ficaria de fora.
 const FASES_CHECKLIST_VALIDAS = ['Pré-Execução', 'Execução', 'Pós-Execução'];
 
+// _ultimaRespostaPorPergunta -- achado real (13/08): salvarResposta()
+// so faz appendRow, sem checar se a pergunta ja tinha resposta pra essa
+// OS -- uma correcao legitima (reenvio com Timestamp novo) gera uma 2a
+// linha, nao substitui a 1a. fecharFaseChecklist() usava .some() sobre
+// TODAS as respostas da OS pra decidir Gerou_NC -- uma correcao que
+// RESOLVE uma nao-conformidade (Gerou_NC true->false) nunca destravava
+// Estado_Seguranca, porque a linha antiga (NC=true) continuava contando.
+// Fix: reduz pra 1 linha por Pergunta_ID -- a de maior Timestamp -- antes
+// de qualquer checagem. Empate ou Timestamp ausente (nao deveria
+// acontecer, mas nao trava) cai pra "ultima no array" (ordem de
+// insercao do appendRow), que e o proximo melhor sinal disponivel.
+function _ultimaRespostaPorPergunta(respostas, idxPerg, idxTimestamp) {
+  const porPergunta = new Map();
+  respostas.forEach(row => {
+    const perguntaId = row[idxPerg];
+    const atual = porPergunta.get(perguntaId);
+    const tsNovo = row[idxTimestamp] instanceof Date ? row[idxTimestamp].getTime() : 0;
+    const tsAtual = atual && atual[idxTimestamp] instanceof Date ? atual[idxTimestamp].getTime() : -1;
+    if (!atual || tsNovo >= tsAtual) porPergunta.set(perguntaId, row);
+  });
+  return porPergunta;
+}
+
 function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) {
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
@@ -2051,8 +2074,14 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
     const idxROS = rH.indexOf('ID_OS');
     const idxRPerg = rH.indexOf('Pergunta_ID');
     const idxRNC = rH.indexOf('Gerou_NC');
+    const idxRTimestamp = rH.indexOf('Timestamp');
     const respostasDaOS = rDados.slice(1).filter(row => String(row[idxROS]) === String(osId));
-    const idsRespondidos = respostasDaOS.map(row => row[idxRPerg]);
+    // So a resposta MAIS RECENTE por pergunta conta -- uma correcao
+    // legitima (Timestamp novo) tem que substituir a resposta anterior
+    // nas checagens abaixo, nao se somar a ela. Ver comentario de
+    // _ultimaRespostaPorPergunta.
+    const ultimaPorPergunta = _ultimaRespostaPorPergunta(respostasDaOS, idxRPerg, idxRTimestamp);
+    const idsRespondidos = Array.from(ultimaPorPergunta.keys());
 
     const faltando = obrigatoriasDaFase.filter(id => idsRespondidos.indexOf(id) < 0);
     if (faltando.length) {
@@ -2060,8 +2089,10 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
         { completa: false, fase: fase, faltando: faltando, blocking_reasons: faltando });
     }
 
-    const temNC = respostasDaOS.some(row =>
-      perguntasDaFase.indexOf(row[idxRPerg]) >= 0 && ehVerdadeiro(row[idxRNC]));
+    const temNC = perguntasDaFase.some(id => {
+      const row = ultimaPorPergunta.get(id);
+      return row && ehVerdadeiro(row[idxRNC]);
+    });
 
     if (fase === 'Pré-Execução') {
       const colEstado = getCol('Estado_Seguranca');
