@@ -532,8 +532,27 @@ function executarIdempotente(operationId, tipoOperacao, osId, tecnicoId, disposi
     if (resultadoBruto) {
       try {
         const cache = JSON.parse(resultadoBruto);
-        const statusReal = (cache && cache.success === false && cache.status) ? cache.status : 'SYNCED';
-        if (dados[i][idxStatus] !== statusReal) {
+        const statusReal = (cache && cache.success === false && cache.status) ? cache.status : 'QUEUED';
+        const statusAtual = dados[i][idxStatus];
+        // Achado da Cowork 1 (mesmo dia que o fix de QUEUED em _sucesso):
+        // com QUEUED como terminal de sucesso, a auto-cura NAO PODE mais
+        // reescrever incondicionalmente -- o 1A (ator externo, Make.com)
+        // avanca a MESMA linha por QUEUED->SENDING->RECEIVED->SYNCED->
+        // RECONCILED depois que este codigo termina. Curar de volta pra
+        // QUEUED sobrescreveria progresso real do 1A. So e seguro curar
+        // quando o status atual esta PRESO num estado anterior ao
+        // terminal do lado do Sheets (LOCAL_PENDING: nunca chegou a
+        // atualizar; SYNC_ERROR: e o proprio caso do T-LOG-02, escrita
+        // do status falhou apos a mutacao ja ter tido sucesso) -- nunca
+        // quando ja esta QUEUED/SENDING/RECEIVED/SYNCED/RECONCILED (sinal
+        // de que o 1A ja tocou ou esta tocando a linha). Recusa
+        // (cache.success===false) fica de fora dessa cautela -- nao ha
+        // mutacao sincronizavel nesse caso, entao nao ha progresso do 1A
+        // pra proteger.
+        const seguroCurar = cache && cache.success === false
+          ? true
+          : (statusAtual === 'LOCAL_PENDING' || statusAtual === 'SYNC_ERROR');
+        if (seguroCurar && statusAtual !== statusReal) {
           try {
             log.getRange(i + 1, idxStatus + 1).setValue(statusReal);
             const idxSincAutoCura = h.indexOf('sincronizado_em');
@@ -652,7 +671,9 @@ function processarEGravarLog(log, linhaNum, headers, fn, operationId) {
   // de 3 escritas falhar" pra "essa 1 escrita especifica falhar".
   try {
     log.getRange(linhaNum, idxResultado + 1).setValue(JSON.stringify(envelope));
-    log.getRange(linhaNum, idxStatus + 1).setValue(envelope.status || 'SYNCED');
+    // 'QUEUED', nao 'SYNCED' -- ver comentario em _sucesso() (achado da
+    // Cowork 1: SYNCED e' escrito pelo 1A/reconciliacao, nao aqui).
+    log.getRange(linhaNum, idxStatus + 1).setValue(envelope.status || 'QUEUED');
     // sincronizado_em (coluna I) e TEXTO ISO 8601, nunca Date nativo —
     // mesma regra critica de criado_em/recebido_em.
     log.getRange(linhaNum, idxSinc + 1).setValue(new Date().toISOString());
@@ -1002,10 +1023,23 @@ function verificarPosseOS(osId, tecnicoId) {
 // por funcao (blockingReasons/faltando/exigeJustificativa/mensagem)
 // continuam presentes via `extras`, mais sucesso/motivos (nomes da
 // versao anterior) -- nada que ja leia eles quebra.
+// Achado da Cowork 1 (revisao do router 1A, mesmo dia): o terminal de
+// sucesso do lado do Apps Script/Sheets tem que ser QUEUED, nao SYNCED.
+// No vocabulario aprovado (LOG_CENTRAL_STATUS_VALIDOS), SYNCED/RECONCILED
+// significam "confirmado sincronizado com o SharePoint" -- algo que so o
+// 1A (ou a reconciliacao, ajuste 8 do auditor: "so marcar RECONCILED apos
+// validacao efetiva do dado no destino") pode saber de verdade. Gravar
+// SYNCED aqui, no momento em que a mutacao no Sheets terminou (nao
+// quando ela de fato chegou no SharePoint), e uma mentira de estado --
+// e o efeito pratico e que NENHUMA linha passa por QUEUED, entao o
+// watchRows do 1A (ajuste 5) nunca teria o que processar no caminho
+// feliz, so os erros. QUEUED e o terminal correto: "mutacao no Sheets
+// concluida, pronta pro 1A pegar". SYNCED/RECONCILED passam a ser
+// escritos exclusivamente pelo 1A/reconciliacao, nunca por este codigo.
 function _sucesso(operationId, resultado) {
   return Object.assign({
     success: true,
-    status: 'SYNCED',
+    status: 'QUEUED',
     operation_id: operationId || null,
     error_code: null,
     retryable: false,
