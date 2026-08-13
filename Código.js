@@ -336,48 +336,6 @@ function _aplicarValidacoesLogCentral(sheet, headers) {
   if (colVersao > 0) sheet.getRange(1, colVersao, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('0');
 }
 
-// _debugLerEstruturaLogCentral -- diagnostico read-only TEMPORARIO, mesmo
-// padrao do diagValidacaoStatus usado no deploy do KM (10/08): confirma a
-// estrutura real pos-setupSheets() sem depender de clasp run (bloqueado
-// por escopo OAuth nesta sessao). Rodar uma vez no editor, copiar o
-// resultado de Ver > Registros, depois REMOVER esta funcao.
-function _debugLerEstruturaLogCentral() {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sheet = ss.getSheetByName('Log_Central');
-  if (!sheet) { Logger.log(JSON.stringify({ erro: 'Log_Central nao existe' })); return; }
-
-  const numCols = sheet.getLastColumn();
-  const headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
-
-  const lerValidacao = (nomeCol) => {
-    const idx = headers.indexOf(nomeCol);
-    if (idx < 0) return { existe: false };
-    const dv = sheet.getRange(2, idx + 1).getDataValidation();
-    if (!dv) return { existe: true, validacao: null };
-    return {
-      existe: true,
-      tipo: dv.getCriteriaType().toString(),
-      valores: dv.getCriteriaValues(),
-      allowInvalid: dv.getAllowInvalid(),
-    };
-  };
-
-  const resultado = {
-    numColunas: numCols,
-    headers: headers,
-    frozenRows: sheet.getFrozenRows(),
-    linhasComDado: sheet.getLastRow(),
-    validacoes: {
-      status: lerValidacao('status'),
-      tipo_operacao: lerValidacao('tipo_operacao'),
-      erro_codigo: lerValidacao('erro_codigo'),
-      entity_type: lerValidacao('entity_type'),
-      tentativas: lerValidacao('tentativas'),
-    },
-  };
-  Logger.log(JSON.stringify(resultado, null, 2));
-}
-
 // _garantirColunasOutboxLogCentral -- idempotente, mesmo padrao das
 // outras colunas novas do projeto (setupSheets): se Log_Central ja foi
 // criado ANTES desta rodada (schema sem entity_type/entity_id/
