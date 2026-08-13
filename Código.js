@@ -235,6 +235,18 @@ const LOG_CENTRAL_COLUNAS_OUTBOX = [
   { nome: 'entity_version', largura: 110 },
 ];
 
+// Teto de retry -- decisao fechada pela Cowork 2 (PROPOSTA-TETO-RETRY.md,
+// 3 eixos: 5 tentativas uniforme pra SYNC_ERROR, backoff crescente,
+// alerta via campo novo em vez de mexer no catalogo aprovado de
+// erro_codigo). So o schema aqui -- a logica do scanner (contagem,
+// backoff, QUANDO marcar) e escopo do cenario Make que a Cowork 1 vai
+// construir, nao deste codigo. Boolean simples, sem validacao de lista
+// (mesmo padrao de outros booleanos do projeto -- Checklist_Execucao_
+// Completo, EPI_Checklist_OK -- nenhum tem formatacao especial).
+const LOG_CENTRAL_COLUNAS_RETRY = [
+  { nome: 'Teto_Excedido', largura: 110 },
+];
+
 const LOG_CENTRAL_STATUS_VALIDOS = ['LOCAL_PENDING', 'QUEUED', 'SENDING', 'RECEIVED', 'SYNCED', 'RECONCILED', 'SYNC_ERROR', 'DIVERGENT'];
 const LOG_CENTRAL_TIPO_OPERACAO_VALIDOS = ['CHECKLIST_RESPOSTA', 'UPLOAD_FOTO', 'ACEITE_CLIENTE', 'REGISTRO_KM', 'APONTAMENTO', 'ASSINATURA', 'REGISTRO_MEDICAO', 'CONCLUSAO_OS'];
 const LOG_CENTRAL_ERRO_CODIGO_VALIDOS = ['TIMEOUT', 'PAYLOAD_INVALIDO', 'CONFLITO_VERSAO', 'PERMISSAO_NEGADA', 'QUOTA_EXCEDIDA', 'CONEXAO_INDISPONIVEL', 'REFERENCIA_INVALIDA', 'DUPLICADO', 'DIVERGENCIA_VALOR', 'DIVERGENCIA_AUSENCIA', 'ERRO_DESCONHECIDO'];
@@ -267,7 +279,8 @@ function garantirLogCentral(ss) {
   sheet = ss.insertSheet('Log_Central');
   const nomes = LOG_CENTRAL_COLUNAS.map(c => c.nome)
     .concat([LOG_CENTRAL_COL_RESULTADO])
-    .concat(LOG_CENTRAL_COLUNAS_OUTBOX.map(c => c.nome));
+    .concat(LOG_CENTRAL_COLUNAS_OUTBOX.map(c => c.nome))
+    .concat(LOG_CENTRAL_COLUNAS_RETRY.map(c => c.nome));
   const numCols = nomes.length;
 
   // 1) cabecalho: negrito + freeze na linha 1.
@@ -280,6 +293,8 @@ function garantirLogCentral(ss) {
   LOG_CENTRAL_COLUNAS.forEach((c, i) => sheet.setColumnWidth(i + 1, c.largura));
   const offsetOutbox = LOG_CENTRAL_COLUNAS.length + 2; // +1 pula pra depois de A-M, +1 pula resultado_json (14a coluna)
   LOG_CENTRAL_COLUNAS_OUTBOX.forEach((c, i) => sheet.setColumnWidth(offsetOutbox + i, c.largura));
+  const offsetRetry = offsetOutbox + LOG_CENTRAL_COLUNAS_OUTBOX.length; // logo apos entity_type/entity_id/entity_version
+  LOG_CENTRAL_COLUNAS_RETRY.forEach((c, i) => sheet.setColumnWidth(offsetRetry + i, c.largura));
 
   // 3) CRITICO: F,G,H,I (criado_em/enviado_em/recebido_em/sincronizado_em)
   // como texto simples ANTES de qualquer dado -- evita o Sheets
@@ -362,11 +377,13 @@ function _aplicarValidacoesLogCentral(sheet, headers) {
 // _garantirColunasOutboxLogCentral -- idempotente, mesmo padrao das
 // outras colunas novas do projeto (setupSheets): se Log_Central ja foi
 // criado ANTES desta rodada (schema sem entity_type/entity_id/
-// entity_version), adiciona as 3 colunas no final sem mexer no resto.
+// entity_version/Teto_Excedido), adiciona as colunas que faltarem no
+// final sem mexer no resto. Cobre Outbox (entity_*) e retry
+// (Teto_Excedido) com o mesmo loop -- ambas sao so "adiciona se faltar".
 function _garantirColunasOutboxLogCentral(sheet) {
   let lastCol = sheet.getLastColumn();
   let headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
-  LOG_CENTRAL_COLUNAS_OUTBOX.forEach(c => {
+  LOG_CENTRAL_COLUNAS_OUTBOX.concat(LOG_CENTRAL_COLUNAS_RETRY).forEach(c => {
     if (!headers.includes(c.nome)) {
       const nextCol = sheet.getLastColumn() + 1;
       sheet.getRange(1, nextCol).setValue(c.nome);
