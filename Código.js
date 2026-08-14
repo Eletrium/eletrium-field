@@ -7,6 +7,14 @@
 
 const SHEET_ID = '1XjMXQKjfcvdxQLj3M6InIH50OfMbzj03uJR5Jx46AvI';
 const TZ = 'GMT-3';
+// FIELD_API_CONTRACT (Seção 19, CONTRATO-BACKEND-FIELD-API-CONTRACT.md,
+// sessão de frontend) -- so incrementa ('v2', 'v3'...) numa mudança
+// QUEBRADORA de verdade no dispatcher/envelope (ex.: parametro posicional
+// novo obrigatorio, remocao de campo que o frontend le), nunca em toda
+// alteracao/deploy. O frontend (eletrium-field-checklist3) compara isso
+// contra FIELD_API_CONTRACT_ESPERADO no boot e bloqueia com tela cheia se
+// divergir -- ver getFieldApiContract() mais abaixo.
+const FIELD_API_CONTRACT = 'v1';
 const OS_LINHAS_FORMATACAO = 20000; // teto pragmatico pra pre-formatar colunas de texto critico em Ordens_Servico (ex.: SP_Sincronizado_Em), mesmo padrao do LOG_CENTRAL_LINHAS_VALIDACAO
 
 // ─── servirPWADireto: serve o PWA embarcado no Apps Script ──────────
@@ -723,6 +731,16 @@ function consultarStatusOperacao(operationId) {
     return { encontrado: true, status: dados[i][idxStatus], resultado: resultado };
   }
   return { encontrado: false };
+}
+
+// getFieldApiContract — leitura publica de metadado do servidor (mesmo
+// padrao de canCloseOS/lerCamposOS: sem checagem de posse, nao e dado de
+// negocio). Chamada como PRIMEIRA coisa no boot do frontend, antes de
+// qualquer outra acao -- se o backend for republicado com uma mudanca
+// quebradora (FIELD_API_CONTRACT incrementado), o frontend bloqueia com
+// tela cheia em vez de continuar silenciosamente incompativel.
+function getFieldApiContract() {
+  return { field_api_contract: FIELD_API_CONTRACT };
 }
 
 // reprocessarOperacaoManual — retry manual acionado por um humano (botao

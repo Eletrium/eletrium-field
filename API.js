@@ -56,6 +56,11 @@ function doPost(e) {
 // ─── Dispatcher central — usado por doGet e doPost ───────────
 function executarAcao(action, p) {
   switch (action) {
+    // Seção 19 (CONTRATO-BACKEND-FIELD-API-CONTRACT.md) -- primeira acao
+    // que o frontend chama no boot, antes de tudo mais. So leitura, sem
+    // parametro, sem checagem de posse.
+    case 'getFieldApiContract':
+      return getFieldApiContract();
     case 'getTecnicos':
       return getTecnicos();
     case 'getDiariaHoje':
