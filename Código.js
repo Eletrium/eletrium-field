@@ -243,8 +243,15 @@ const LOG_CENTRAL_COLUNAS_OUTBOX = [
 // construir, nao deste codigo. Boolean simples, sem validacao de lista
 // (mesmo padrao de outros booleanos do projeto -- Checklist_Execucao_
 // Completo, EPI_Checklist_OK -- nenhum tem formatacao especial).
+// Retry_Manual_Por/Retry_Manual_Em -- especificacao fechada (Geovane,
+// 14/08): quando o retry manual reseta uma linha Teto_Excedido=true de
+// volta pra QUEUED, precisa registrar quem pediu e quando -- nao existia
+// nenhum campo pra isso ate agora (reprocessarOperacaoManual, abaixo, e
+// a unica escrita nessas 2 colunas).
 const LOG_CENTRAL_COLUNAS_RETRY = [
   { nome: 'Teto_Excedido', largura: 110 },
+  { nome: 'Retry_Manual_Por', largura: 140 },
+  { nome: 'Retry_Manual_Em', largura: 160 },
 ];
 
 const LOG_CENTRAL_STATUS_VALIDOS = ['LOCAL_PENDING', 'QUEUED', 'SENDING', 'RECEIVED', 'SYNCED', 'RECONCILED', 'SYNC_ERROR', 'DIVERGENT'];
@@ -297,9 +304,10 @@ function garantirLogCentral(ss) {
   LOG_CENTRAL_COLUNAS_RETRY.forEach((c, i) => sheet.setColumnWidth(offsetRetry + i, c.largura));
 
   // 3) CRITICO: F,G,H,I (criado_em/enviado_em/recebido_em/sincronizado_em)
-  // como texto simples ANTES de qualquer dado -- evita o Sheets
-  // autoconverter ISO 8601 em Date com timezone silencioso.
-  ['criado_em', 'enviado_em', 'recebido_em', 'sincronizado_em'].forEach(nome => {
+  // + Retry_Manual_Em (mesma classe de coluna, mesmo risco) como texto
+  // simples ANTES de qualquer dado -- evita o Sheets autoconverter ISO
+  // 8601 em Date com timezone silencioso.
+  ['criado_em', 'enviado_em', 'recebido_em', 'sincronizado_em', 'Retry_Manual_Em'].forEach(nome => {
     const idx = nomes.indexOf(nome) + 1;
     sheet.getRange(1, idx, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('@');
   });
@@ -389,6 +397,9 @@ function _garantirColunasOutboxLogCentral(sheet) {
       sheet.getRange(1, nextCol).setValue(c.nome);
       sheet.setColumnWidth(nextCol, c.largura);
       if (c.nome === 'entity_version') sheet.getRange(1, nextCol, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('0');
+      // mesma cautela critica de criado_em/sincronizado_em (texto ANTES
+      // de qualquer dado, senao o Sheets autoconverte ISO 8601 em Date).
+      if (c.nome === 'Retry_Manual_Em') sheet.getRange(1, nextCol, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('@');
       headers.push(c.nome);
     }
   });
@@ -712,6 +723,86 @@ function consultarStatusOperacao(operationId) {
     return { encontrado: true, status: dados[i][idxStatus], resultado: resultado };
   }
   return { encontrado: false };
+}
+
+// reprocessarOperacaoManual — retry manual acionado por um humano (botao
+// "Tentar novamente" fora do outbox local do tecnico, Fase A do Code 2 --
+// esse botao ja existente so cobre DIVERGENT via novo operationId; este
+// endpoint e' NOVO, cobre o caso complementar: SYNC_ERROR que esgotou as
+// 5 tentativas automaticas). Especificacao fechada (Geovane, 14/08):
+//
+// - So elegivel quando status==='SYNC_ERROR' E Teto_Excedido===true --
+//   e' assim que a funcao distingue "esgotou o teto, precisa de humano"
+//   de "ainda dentro do teto, o scanner automatico ja cobre" (fail-closed,
+//   recusa qualquer outra combinacao, mesmo padrao do resto do projeto).
+//   DIVERGENT nunca bate essa condicao (status diferente) -- nao e'
+//   afetado por este caminho em nenhuma hipotese, dos dois lados: nem
+//   avancado por aqui, nem tocado por engano.
+// - Reseta Teto_Excedido->false, status->QUEUED. NAO zera `tentativas`
+//   (preserva o historico acumulado) nem `erro_codigo`/`erro_detalhe` (o
+//   "erro anterior" fica registrado, so deixa de bloquear).
+// - Registra quem pediu (Retry_Manual_Por) e quando (Retry_Manual_Em,
+//   ISO 8601 texto -- mesma cautela critica de criado_em/sincronizado_em).
+//
+// Nuance sinalizada, nao resolvida aqui (fora de escopo deste contrato):
+// toda linha que bate essa condicao chega SEM resultado_json (SYNC_ERROR
+// por excecao em processarEGravarLog nunca grava resultado_json -- so o
+// caminho de sucesso grava). Ou seja, esta funcao pode produzir uma linha
+// QUEUED com resultado_json vazio, diferente de todo outro QUEUED do
+// sistema (que sempre tem resultado_json, e' o sinal de "mutacao ja
+// aconteceu, so falta sincronizar"). O scanner (Cowork 1, ainda nao
+// construido, REQUISITOS-SCANNER-RETRY.md) precisa saber distinguir isso:
+// para ESTAS linhas, QUEUED significa "re-invocar o dispatcher com o
+// operation_id original pra rodar fn() de novo" (mesmo mecanismo do
+// retry automatico via resultado_json ausente em executarIdempotente),
+// nao "repassar resultado_json pro SharePoint". Sinalizado no doc do
+// scanner, nao decidido por este codigo.
+//
+// Sem verificarPosseOS -- nao e' uma acao de tecnico sobre "sua" OS, e'
+// uma acao administrativa sobre uma linha de Log_Central (nao ha conceito
+// de posse de uma linha de log). solicitanteId e' registrado como
+// identificador de auditoria (quem clicou), nao validado contra nenhuma
+// lista fechada (a natureza de quem opera esse botao -- gestor/admin --
+// ainda nao tem uma tabela de identidade propria no projeto, diferente
+// de Tecnicos_MEI).
+function reprocessarOperacaoManual(operationId, solicitanteId) {
+  if (!operationId) return { sucesso: false, erro: 'operationId obrigatorio' };
+  if (!solicitanteId || !String(solicitanteId).trim()) return { sucesso: false, erro: 'solicitanteId obrigatorio' };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const log = ss.getSheetByName('Log_Central');
+  if (!log) return { sucesso: false, erro: 'Log_Central nao encontrado' };
+
+  const resultado = _comLockDeOS(() => {
+    const dados = log.getDataRange().getValues();
+    const h = dados[0];
+    const idxOpId = h.indexOf('operation_id');
+    const idxStatus = h.indexOf('status');
+    const idxTeto = h.indexOf('Teto_Excedido');
+    const idxRetryPor = h.indexOf('Retry_Manual_Por');
+    const idxRetryEm = h.indexOf('Retry_Manual_Em');
+
+    for (let i = 1; i < dados.length; i++) {
+      if (String(dados[i][idxOpId]) !== String(operationId)) continue;
+
+      const statusAtual = dados[i][idxStatus];
+      const tetoAtual = idxTeto >= 0 ? dados[i][idxTeto] : false;
+      if (statusAtual !== 'SYNC_ERROR' || tetoAtual !== true) {
+        return { sucesso: false, erro: 'Retry manual so permitido para operacoes SYNC_ERROR com teto de tentativas excedido (status atual: ' + statusAtual + ', Teto_Excedido: ' + tetoAtual + ')' };
+      }
+
+      const linhaNum = i + 1;
+      log.getRange(linhaNum, idxStatus + 1).setValue('QUEUED');
+      if (idxTeto >= 0) log.getRange(linhaNum, idxTeto + 1).setValue(false);
+      if (idxRetryPor >= 0) log.getRange(linhaNum, idxRetryPor + 1).setValue(solicitanteId);
+      if (idxRetryEm >= 0) log.getRange(linhaNum, idxRetryEm + 1).setValue(new Date().toISOString());
+      return { sucesso: true, operationId: operationId, status: 'QUEUED' };
+    }
+    return { sucesso: false, erro: 'Operacao nao encontrada: ' + operationId };
+  });
+
+  if (!resultado.lockObtido) return { sucesso: false, erro: 'Sistema ocupado, tente novamente em instantes' };
+  return resultado.valor;
 }
 
 // ─── salvarArquivoOS — Frente B (fatia prioritaria, Diretriz v1.1) ───

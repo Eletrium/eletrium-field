@@ -146,6 +146,13 @@ function executarAcao(action, p) {
     // si) — GET/JSONP normal, corpo pequeno.
     case 'consultarStatusOperacao':
       return consultarStatusOperacao(p[0]);
+    // Retry manual (Seção 24, espec fechada Geovane 14/08) -- so pra
+    // linhas SYNC_ERROR com Teto_Excedido=true (teto de 5 tentativas
+    // automaticas esgotado). Distinto do botao "TENTAR NOVAMENTE" que o
+    // Code 2 ja construiu na Fase A (esse cobre DIVERGENT, gera
+    // operationId novo, roda 100% no frontend/outbox local).
+    case 'reprocessarOperacaoManual':
+      return reprocessarOperacaoManual(p[0], p[1]);
     // Frente B, fatia 2 (Diretriz v1.1) — selfie + checklist EPI +
     // diário do técnico. Chega via POST (mesmo motivo do salvarArquivoOS
     // — base64 da selfie estoura limite de URL de GET/JSONP).
