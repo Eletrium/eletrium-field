@@ -2453,13 +2453,82 @@ function registrarAceiteOferta(ofertaId, tecnicoId, aceito, motivoRecusa, operat
       g('Criada_Em'),
       g('Expira_Em'),
       novoStatus,
-      new Date(),
+      // .toISOString() (texto), NAO Date nativo -- achado adjacente
+      // (14/08, mesma classe de bug ja corrigida repetidas vezes em
+      // Log_Central/Ordens_Servico): Date nativo deixa o Sheets
+      // autoconverter/aplicar timezone silenciosamente. So esta coluna
+      // desta aba ainda usava o padrao antigo.
+      new Date().toISOString(),
       aceito === true ? '' : String(motivoRecusa).trim(),
       operationId || ''
     ]);
 
     return { sucesso: true, status: novoStatus };
   });
+}
+
+// criarOfertaAlocacao — gera o link de aceite de oferta (Secao 25,
+// decisao de produto fechada 14/08: gestor solicita, backend gera
+// offer_id + define tecnico/OS/validade + assina HMAC + retorna link;
+// frontend so apresenta). Ate agora so existiam leitura
+// (getOfertaAlocacao) e resposta (registrarAceiteOferta) -- quem gerava
+// a linha "Pendente" inicial ficava fora do contrato original
+// (CONTRATO-BACKEND-ACEITE-OFERTA.md), decisao adiada explicitamente pro
+// console do gestor ("decisao separada"). Essa decisao foi tomada agora.
+//
+// Sem verificarPosseOS/executarIdempotente -- mesma categoria de
+// reprocessarOperacaoManual: acao administrativa (gestor), nao acao de
+// tecnico sobre "sua" OS. Sem autenticacao propria alem disso -- mesmo
+// gap ja documentado do dispatcher inteiro (DESENHO-FRENTE-E-AUTH-
+// DISPATCHER.md, Opcao A so desenhada, nao implementada), nao piora o
+// que ja existe.
+const DEFAULT_VALIDADE_OFERTA_HORAS = 48;
+
+function criarOfertaAlocacao(osId, tecnicoId, escopoResumo, valorProposto, validadeHoras) {
+  if (!osId) return { sucesso: false, erro: 'osId obrigatorio' };
+  if (!tecnicoId) return { sucesso: false, erro: 'tecnicoId obrigatorio' };
+  if (!escopoResumo || !String(escopoResumo).trim()) return { sucesso: false, erro: 'escopoResumo obrigatorio' };
+
+  // Fail-closed: sem segredo configurado, nao ha "assinatura correta"
+  // possivel -- mesma filosofia de verificarAssinaturaOferta, aqui do
+  // lado de quem EMITE em vez de quem VALIDA.
+  const segredo = PropertiesService.getScriptProperties().getProperty(OFERTA_SEGREDO_PROPERTY);
+  if (!segredo) return { sucesso: false, erro: 'OFERTA_HMAC_SECRET nao configurado -- nao e possivel assinar o link' };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName('Alocacoes_Ofertas');
+  if (!sheet) return { sucesso: false, erro: 'Aba Alocacoes_Ofertas nao encontrada' };
+
+  const now = new Date();
+  const ofertaId = 'OF-' + Utilities.formatDate(now, TZ, 'yyyyMMddHHmmss') + '-' + Math.floor(100 + Math.random() * 900);
+  const horas = Number(validadeHoras) > 0 ? Number(validadeHoras) : DEFAULT_VALIDADE_OFERTA_HORAS;
+  const expiraEm = new Date(now.getTime() + horas * 60 * 60 * 1000);
+  // Unix seconds -- MESMO formato que verificarAssinaturaOferta espera
+  // no payload assinado (exp entra cru no HMAC, sem conversao).
+  const exp = Math.floor(expiraEm.getTime() / 1000);
+
+  const payload = String(ofertaId) + '|' + String(tecnicoId) + '|' + String(exp);
+  const sig = _bytesParaHex(Utilities.computeHmacSha256Signature(payload, segredo));
+
+  sheet.appendRow([
+    ofertaId, osId, tecnicoId, String(escopoResumo).trim(), valorProposto || '',
+    now.toISOString(), expiraEm.toISOString(), 'Pendente', '', '', ''
+  ]);
+
+  return {
+    sucesso: true,
+    ofertaId: ofertaId,
+    tecnicoId: tecnicoId,
+    exp: exp,
+    sig: sig,
+    // Fragmento pronto no formato exato que o frontend real ja espera
+    // (eletrium-field-checklist3/index.html, location.hash:
+    // "#oferta&id=...&tecnico=...&exp=...&sig=..."). O backend NAO
+    // conhece a URL base publicada do frontend (GitHub Pages, fora deste
+    // projeto Apps Script) -- devolve so o fragmento; quem chama (console
+    // do gestor) concatena com a base real que ele conhece.
+    linkFragmento: 'oferta&id=' + encodeURIComponent(ofertaId) + '&tecnico=' + encodeURIComponent(tecnicoId) + '&exp=' + exp + '&sig=' + sig
+  };
 }
 
 // ================================================================

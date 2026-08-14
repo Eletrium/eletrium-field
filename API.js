@@ -176,6 +176,10 @@ function executarAcao(action, p) {
       return getOfertaAlocacao(p[0], p[1], p[2], p[3]);
     case 'registrarAceiteOferta':
       return registrarAceiteOferta(p[0], p[1], p[2], p[3], p[4], p[5]);
+    // Seção 25 -- gestor solicita, backend gera/assina o link. p[4]
+    // (validadeHoras) opcional, default 48h.
+    case 'criarOfertaAlocacao':
+      return criarOfertaAlocacao(p[0], p[1], p[2], p[3], p[4]);
     // Ferramental — carga/desmobilizacao (CONTRATO-BACKEND-FERRAMENTAL.md).
     case 'registrarMovimentoFerramental':
       return registrarMovimentoFerramental(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
