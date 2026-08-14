@@ -1740,44 +1740,72 @@ function encerrarOS(osId, tecnicoId, tecnicoNome, dadosEnc) {
 }
 
 // ─── criarOSEmergencia ──────────────────────────────────────────
+// operationId/dispositivoId (achado do cross-check do plano de deploy,
+// 13/08): faltava migrar pra executarIdempotente, mesmo padrao das
+// outras 4 funcoes do grupo (iniciarOSComKM/encerrarOSComKM/
+// registrarKMFinalPendente/salvarResposta) -- retry de rede criava uma
+// 2a OS de emergencia (risco DIFERENTE da colisao de ID por timestamp
+// ja corrigida em 10/08). Lidos de `dados.operationId`/
+// `dados.dispositivoId` (objeto unico, mesma convencao ja usada por
+// esta funcao) em vez de parametros posicionais novos -- nao desloca
+// nada pra quem ainda chama sem eles (executarIdempotente roda fn()
+// direto se operationId for ausente, mesmo fallback ja estabelecido).
+//
+// novoId e' gerado DENTRO de fn(), nao antes -- critico pra correcao:
+// fn() so roda de verdade UMA vez por operationId (protegido pelo
+// resultado_json de executarIdempotente, igual toda outra funcao). Se
+// novoId fosse gerado fora (pra virar o osId da reserva de
+// entity_version), um retry legitimo (T-LOG-01, fn() nunca completou)
+// geraria um novoId DIFERENTE a cada tentativa, e a linha do Log_Central
+// (que grava o osId no momento da reserva, antes de fn() rodar) ficaria
+// apontando pra um ID que nunca foi criado de verdade -- daria pra achar
+// que corrigiu o problema mas na real so trocaria "qual ID duplica" por
+// "Log_Central aponta pro ID errado". Por isso a reserva usa
+// `entidade.id = operationId` (sempre estavel) em vez do osId ainda
+// inexistente -- nao ha posse aplicavel aqui (a OS ainda nao existe,
+// ninguem e dono dela ainda).
 function criarOSEmergencia(dados) {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  const now = new Date();
-  // Granularidade de minuto colidia em chamadas rapidas (achado real em teste,
-  // 10/08) -- segundos + sufixo aleatorio de 3 digitos torna a colisao
-  // desprezivel sem mudar o prefixo 'EMG-' que o resto do sistema reconhece.
-  const novoId = 'EMG-' + Utilities.formatDate(now, TZ, 'yyyyMMddHHmmss') + '-' + Math.floor(100 + Math.random() * 900);
-  const osSheet = ss.getSheetByName('Ordens_Servico');
-  if (!osSheet) return _recusa(null, 'Aba Ordens_Servico nao encontrada');
+  const operationId = dados && dados.operationId;
+  const dispositivoId = dados && dados.dispositivoId;
+  return executarIdempotente(operationId, 'APONTAMENTO', '', dados && dados.tecnicoId, dispositivoId, () => {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const now = new Date();
+    // Granularidade de minuto colidia em chamadas rapidas (achado real em teste,
+    // 10/08) -- segundos + sufixo aleatorio de 3 digitos torna a colisao
+    // desprezivel sem mudar o prefixo 'EMG-' que o resto do sistema reconhece.
+    const novoId = 'EMG-' + Utilities.formatDate(now, TZ, 'yyyyMMddHHmmss') + '-' + Math.floor(100 + Math.random() * 900);
+    const osSheet = ss.getSheetByName('Ordens_Servico');
+    if (!osSheet) return _recusa(operationId, 'Aba Ordens_Servico nao encontrada');
 
-  const headers = osSheet.getRange(1, 1, 1, osSheet.getLastColumn()).getValues()[0];
-  const novaOS = new Array(headers.length).fill('');
-  const set = (campo, val) => {
-    const idx = headers.indexOf(campo);
-    if (idx >= 0) novaOS[idx] = val;
-  };
+    const headers = osSheet.getRange(1, 1, 1, osSheet.getLastColumn()).getValues()[0];
+    const novaOS = new Array(headers.length).fill('');
+    const set = (campo, val) => {
+      const idx = headers.indexOf(campo);
+      if (idx >= 0) novaOS[idx] = val;
+    };
 
-  set('ID_OS', novoId);
-  set('Nome_Cliente', dados.clienteNome || '');
-  set('ID_Cliente', dados.clienteId || '');
-  set('Nome_Tecnico', dados.tecnicoNome || '');
-  set('ID_Tecnico', dados.tecnicoId || '');
-  set('Descricao', dados.descricao || '');
-  set('Status', 'Em Andamento');
-  set('Status_Atual', 'Em andamento');
-  set('Prioridade_OS', 'Emergencia');
-  set('Tipo_OS_Completo', 'Emergencia - mesmo cliente');
-  set('Data_Abertura', now);
-  set('Hora_Inicio', now);
-  set('Em_Pausa_Agora', false);
-  set('OS_Interrupcao_ID', dados.osOrigemId || '');
-  set('Local', dados.local || '');
+    set('ID_OS', novoId);
+    set('Nome_Cliente', dados.clienteNome || '');
+    set('ID_Cliente', dados.clienteId || '');
+    set('Nome_Tecnico', dados.tecnicoNome || '');
+    set('ID_Tecnico', dados.tecnicoId || '');
+    set('Descricao', dados.descricao || '');
+    set('Status', 'Em Andamento');
+    set('Status_Atual', 'Em andamento');
+    set('Prioridade_OS', 'Emergencia');
+    set('Tipo_OS_Completo', 'Emergencia - mesmo cliente');
+    set('Data_Abertura', now);
+    set('Hora_Inicio', now);
+    set('Em_Pausa_Agora', false);
+    set('OS_Interrupcao_ID', dados.osOrigemId || '');
+    set('Local', dados.local || '');
 
-  osSheet.appendRow(novaOS);
-  registrarSegmento(ss, novoId, dados.tecnicoId, dados.tecnicoNome,
-    'Inicio', now, 0, 0, dados.local || '');
+    osSheet.appendRow(novaOS);
+    registrarSegmento(ss, novoId, dados.tecnicoId, dados.tecnicoNome,
+      'Inicio', now, 0, 0, dados.local || '');
 
-  return { sucesso: true, osId: novoId, hora: formatarHora(now) };
+    return { sucesso: true, osId: novoId, hora: formatarHora(now) };
+  }, { tipo: 'APONTAMENTO', id: operationId || '' });
 }
 
 // ================================================================
@@ -1961,9 +1989,26 @@ function lerAbaCompleta(nomeAba) {
 
 // Salva a resposta do tecnico na aba Checklist_Respostas.
 // geraNC = true se a opcao escolhida tem Aciona_NC = true.
+// tecnicoId (11o parametro, TRAILING) -- achado do cross-check do plano
+// de deploy (13/08): faltava posse aqui, mesmo padrao ja usado em 7
+// outras escritas criticas. Adicionado no FINAL da assinatura (nao no
+// meio) pra nao deslocar nenhum parametro posicional ja usado por
+// chamador nenhum (4 pontos reais no frontend + varios testes mock) --
+// mesmo padrao ja usado quando operationId/dispositivoId foram
+// adicionados. `tecnico` (nome, ja existia) continua sendo o valor
+// gravado na coluna de exibicao 'Tecnico' de Checklist_Respostas;
+// `tecnicoId` e usado SO pra posse e pro tecnico_id real do Log_Central
+// (achado adjacente: antes desta correcao, Log_Central.tecnico_id pra
+// CHECKLIST_RESPOSTA guardava o NOME, nao o ID -- inconsistente com
+// todo o resto do projeto). CONTRATO-BACKEND-SALVARRESPOSTA-POSSE.md
+// documenta a mudanca de assinatura que o frontend precisa aplicar --
+// sem isso, o frontend atual (que nao envia tecnicoId) teria toda
+// chamada recusada por posse indeterminada (fail-closed, deliberado).
 function salvarResposta(osId, idSharePointOS, perguntaId, textoPergunta,
-                        resposta, fotoUrl, tecnico, geraNC, operationId, dispositivoId) {
-  return executarIdempotente(operationId, 'CHECKLIST_RESPOSTA', osId, tecnico, dispositivoId, () => {
+                        resposta, fotoUrl, tecnico, geraNC, operationId, dispositivoId, tecnicoId) {
+  const posse = verificarPosseOS(osId, tecnicoId);
+  if (!posse.ok) return _recusa(operationId, posse.erro);
+  return executarIdempotente(operationId, 'CHECKLIST_RESPOSTA', osId, tecnicoId, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const respSheet = ss.getSheetByName('Checklist_Respostas');
   if (!respSheet) return _recusa(operationId, 'Aba Checklist_Respostas nao encontrada');
@@ -2689,6 +2734,13 @@ function encerrarOSComKM(osId, tecnicoId, tecnicoNome, dadosEnc, lat, lng, opera
 // Preenche o KM final de uma OS já concluída, sem reabrir nada.
 // Roda a mesma validacao de desvio (foto+texto) que o KM inicial usa.
 function registrarKMFinalPendente(osId, tecnicoId, kmFinal, justificativaDesvio, fotoDesvioUrl, operationId, dispositivoId) {
+  // Achado do cross-check do plano de deploy (13/08): faltava posse aqui --
+  // mesmo padrao ja usado em salvarArquivoOS/confirmarSegurancaPreExecucao/
+  // salvarSelfieEPI/iniciarOS/encerrarOS/fecharFaseChecklist/
+  // registrarMovimentoFerramental. Sem isso, qualquer tecnicoId valido
+  // fechava o KM final de uma OS que nao era dele.
+  const posse = verificarPosseOS(osId, tecnicoId);
+  if (!posse.ok) return _recusa(operationId, posse.erro);
   return executarIdempotente(operationId, 'REGISTRO_KM', osId, tecnicoId, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const osSheet = ss.getSheetByName('Ordens_Servico');
