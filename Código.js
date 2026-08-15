@@ -2564,47 +2564,92 @@ function registrarAceiteOferta(ofertaId, tecnicoId, aceito, motivoRecusa, operat
   const osIdReal = gPre('OS_ID');
 
   return executarIdempotente(operationId, 'ACEITE_CLIENTE', osIdReal, tecnicoId, dispositivoId, () => {
-    // Releitura fresca -- protege contra corrida com outra resposta ja
-    // registrada por uma operation_id DIFERENTE entre o precheck acima e
-    // esta gravacao (retry da MESMA operation_id nunca chega aqui,
-    // executarIdempotente ja devolveu o resultado cacheado antes de
-    // rodar este fn() de novo).
-    const ultima = _ultimaLinhaOferta(sheet, ofertaId);
-    if (!ultima) return _recusa(operationId, 'Oferta nao encontrada: ' + ofertaId);
-    const g = (campo) => ultima.valores[ultima.headers.indexOf(campo)];
+    // 2 achados red-team confirmados (Cowork 2, 15/08), mesma categoria
+    // do TOCTOU ja corrigido em encerrarOS:
+    //
+    // 1. Resposta duplicada (achado descrito como "dupla alocacao"):
+    //    dois tecnicos DIFERENTES nunca conseguem passar a checagem de
+    //    posse acima (Tecnico_ID e fixo por oferta desde criarOferta
+    //    Alocacao -- so 1 tecnicoId satisfaz a igualdade, nao importa
+    //    timing). O risco real e' outro: o MESMO tecnico, via 2
+    //    operationId diferentes (duplo-toque, 2 aparelhos, retry que
+    //    gerou novo id) -- a releitura fresca de baixo, SEM lock,
+    //    nao impedia que 2 chamadas quase simultaneas lessem
+    //    Status==='Pendente' ANTES de qualquer uma ter dado append,
+    //    resultando em 2 linhas de resposta (ex.: Aceita + Recusada,
+    //    ou Aceita 2x) pra mesma oferta -- exatamente o padrao ja
+    //    corrigido em encerrarOS (comentario antigo aqui reivindicava
+    //    protecao que so cobria retry da MESMA operationId, nao
+    //    concorrencia real entre operationIds diferentes).
+    // 2. Expiracao nunca era checada aqui -- so em getOfertaAlocacao
+    //    (leitura, no momento em que o tecnico ABRE o link). Entre abrir
+    //    o link e apertar "aceitar" pode passar qualquer tempo (nao e'
+    //    so uma janela de corrida estreita) -- sem essa checagem, uma
+    //    oferta expirada continuava aceitavel indefinidamente enquanto
+    //    Status continuasse 'Pendente'.
+    //
+    // Fix pros dois: TODA a sequencia critica (releitura + checagem de
+    // expiracao + checagem de status + validacao + appendRow) roda sob
+    // UMA trava (_comLockDeOS) -- diferente de encerrarOS (onde so um
+    // guard curto ficou sob lock, o resto continuou fora por ser mais
+    // pesado), aqui a mutacao inteira e' 1 appendRow simples, do mesmo
+    // porte do que o proprio Intent Log de executarIdempotente ja tranca
+    // -- travar tudo e' simples e correto, sem motivo pra reserva parcial.
+    const resultado = _comLockDeOS(() => {
+      const ultima = _ultimaLinhaOferta(sheet, ofertaId);
+      if (!ultima) return { tipo: 'erro', mensagem: 'Oferta nao encontrada: ' + ofertaId };
+      const g = (campo) => ultima.valores[ultima.headers.indexOf(campo)];
 
-    if (g('Status') !== 'Pendente') {
+      const expiraEm = g('Expira_Em');
+      if (expiraEm && new Date(expiraEm).getTime() < Date.now()) {
+        return { tipo: 'expirada', expiraEm: expiraEm };
+      }
+
+      if (g('Status') !== 'Pendente') {
+        return { tipo: 'ja_respondida', status: g('Status') };
+      }
+
+      if (aceito !== true && !(motivoRecusa && String(motivoRecusa).trim())) {
+        return { tipo: 'sem_motivo' };
+      }
+
+      const novoStatus = aceito === true ? 'Aceita' : 'Recusada';
+      sheet.appendRow([
+        ofertaId,
+        g('OS_ID'),
+        tecnicoId,
+        g('Escopo_Resumo'),
+        g('Valor_Proposto'),
+        g('Criada_Em'),
+        g('Expira_Em'),
+        novoStatus,
+        // .toISOString() (texto), NAO Date nativo -- achado adjacente
+        // (14/08, mesma classe de bug ja corrigida repetidas vezes em
+        // Log_Central/Ordens_Servico): Date nativo deixa o Sheets
+        // autoconverter/aplicar timezone silenciosamente. So esta coluna
+        // desta aba ainda usava o padrao antigo.
+        new Date().toISOString(),
+        aceito === true ? '' : String(motivoRecusa).trim(),
+        operationId || ''
+      ]);
+
+      return { tipo: 'sucesso', status: novoStatus };
+    });
+
+    if (!resultado.lockObtido) {
+      return _recusa(operationId, 'Sistema ocupado, tente novamente em instantes', { error_code: 'CONEXAO_INDISPONIVEL', retryable: true, status: 'SYNC_ERROR' });
+    }
+    const r = resultado.valor;
+    if (r.tipo === 'erro') return _recusa(operationId, r.mensagem);
+    if (r.tipo === 'expirada') return _recusa(operationId, 'Oferta expirada', { oferta_status: 'Expirada', expiraEm: r.expiraEm });
+    if (r.tipo === 'ja_respondida') {
       // NAO usar `status` aqui (extras.status) -- colidiria com o campo
       // canonico do envelope (SYNCED/DIVERGENT/SYNC_ERROR). oferta_status
       // e o status DE NEGOCIO da oferta (Aceita/Recusada), campo distinto.
-      return _recusa(operationId, 'Oferta ja foi respondida', { oferta_status: g('Status') });
+      return _recusa(operationId, 'Oferta ja foi respondida', { oferta_status: r.status });
     }
-
-    if (aceito !== true && !(motivoRecusa && String(motivoRecusa).trim())) {
-      return _recusa(operationId, 'Motivo de recusa obrigatorio');
-    }
-
-    const novoStatus = aceito === true ? 'Aceita' : 'Recusada';
-    sheet.appendRow([
-      ofertaId,
-      g('OS_ID'),
-      tecnicoId,
-      g('Escopo_Resumo'),
-      g('Valor_Proposto'),
-      g('Criada_Em'),
-      g('Expira_Em'),
-      novoStatus,
-      // .toISOString() (texto), NAO Date nativo -- achado adjacente
-      // (14/08, mesma classe de bug ja corrigida repetidas vezes em
-      // Log_Central/Ordens_Servico): Date nativo deixa o Sheets
-      // autoconverter/aplicar timezone silenciosamente. So esta coluna
-      // desta aba ainda usava o padrao antigo.
-      new Date().toISOString(),
-      aceito === true ? '' : String(motivoRecusa).trim(),
-      operationId || ''
-    ]);
-
-    return { sucesso: true, status: novoStatus };
+    if (r.tipo === 'sem_motivo') return _recusa(operationId, 'Motivo de recusa obrigatorio');
+    return { sucesso: true, status: r.status };
   });
 }
 
