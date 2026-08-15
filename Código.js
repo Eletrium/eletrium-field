@@ -2598,6 +2598,65 @@ function verificarAssinaturaOferta(ofertaId, tecnicoId, exp, sig) {
   return _hexIgualConstante(sigEsperada.toLowerCase(), String(sig).trim().toLowerCase());
 }
 
+// ─── Token de sessao (Opcao A, DESENHO-FRENTE-E-AUTH-DISPATCHER.md) ──
+// Fecha o E-TOCTOU-01 (P0 pro go-live, 15/08): ate aqui o backend confia
+// cegamente no tecnicoId que vem no payload de cada chamada -- so prova
+// POSSE (dono da OS), nunca IDENTIDADE (quem realmente esta chamando).
+// validarPinTecnico emite este token no login; verificarTokenSessao
+// revalida identidade+validade em cada operacao critica migrada
+// (PLANO-ROLLOUT-OPCAO-A-TOKEN-SESSAO.md -- rollout por ondas, token
+// opcional durante a transicao, mesmo padrao ja usado pro operation_id).
+// Segredo PROPRIO (SESSAO_HMAC_SECRET), separado de OFERTA_HMAC_SECRET --
+// vazar um nao compromete o outro. Reusa os mesmos primitivos HMAC
+// (_bytesParaHex/_hexIgualConstante) ja provados no link de oferta.
+const SESSAO_SEGREDO_PROPERTY = 'SESSAO_HMAC_SECRET';
+const SESSAO_VALIDADE_SEGUNDOS = 24 * 60 * 60; // ~1 turno de trabalho, cobre virada de plantao
+
+// Fail-closed: sem segredo configurado, nao emite token nenhum (null) --
+// quem chama decide se trata isso como erro ou como "sessao sem token
+// ainda", nunca finge sucesso.
+function emitirTokenSessao(tecnicoId) {
+  const segredo = PropertiesService.getScriptProperties().getProperty(SESSAO_SEGREDO_PROPERTY);
+  if (!segredo) return null;
+  const expiraEm = Math.floor(Date.now() / 1000) + SESSAO_VALIDADE_SEGUNDOS;
+  const payload = String(tecnicoId) + '.' + expiraEm;
+  const sig = _bytesParaHex(Utilities.computeHmacSha256Signature(payload, segredo));
+  return { token: payload + '.' + sig, expiraEm: expiraEm };
+}
+
+// Token = tecnicoId + '.' + expiraEm + '.' + sig -- separa pelas 2
+// ULTIMAS ocorrencias de '.' (pop, nao split[0]/[1]) pra tolerar um
+// tecnicoId que por acaso contenha '.'.
+// Fail-closed em toda direcao: sem segredo, token ausente/malformado,
+// assinatura errada, expirado, OU tecnicoId embutido no token diferente
+// do tecnicoId que a chamada afirma usar -- tudo vira invalido. Este
+// ultimo caso e o cerne do E-TOCTOU-01: "autenticado como X, agindo
+// como Y" so e barrado aqui, nao pela posse (verificarPosseOS so sabe
+// comparar contra a OS, nunca prova quem esta do outro lado da chamada).
+function verificarTokenSessao(token, tecnicoIdEsperado) {
+  const segredo = PropertiesService.getScriptProperties().getProperty(SESSAO_SEGREDO_PROPERTY);
+  if (!segredo || !token) return { ok: false, erro: 'Token de sessao ausente' };
+
+  const partes = String(token).split('.');
+  if (partes.length < 3) return { ok: false, erro: 'Token de sessao malformado' };
+  const sig = partes.pop();
+  const expiraEm = partes.pop();
+  const tecnicoIdToken = partes.join('.');
+
+  const payload = tecnicoIdToken + '.' + expiraEm;
+  const sigEsperada = _bytesParaHex(Utilities.computeHmacSha256Signature(payload, segredo));
+  if (!_hexIgualConstante(sigEsperada.toLowerCase(), String(sig).trim().toLowerCase())) {
+    return { ok: false, erro: 'Token de sessao invalido' };
+  }
+  if (!/^\d+$/.test(expiraEm) || Math.floor(Date.now() / 1000) > Number(expiraEm)) {
+    return { ok: false, erro: 'Token de sessao expirado' };
+  }
+  if (String(tecnicoIdToken) !== String(tecnicoIdEsperado)) {
+    return { ok: false, erro: 'Token de sessao nao corresponde ao tecnico informado' };
+  }
+  return { ok: true };
+}
+
 // Ultima linha (a mais recente, append-only) para este Oferta_ID -- o
 // evento de resposta (registrarAceiteOferta) ANEXA uma linha nova em vez
 // de editar a original, entao "o estado atual da oferta" e sempre a

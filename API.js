@@ -216,7 +216,7 @@ function validarPinTecnico(tecnicoId, pin) {
 
     // Já migrado: compara hash, nunca toca em texto puro.
     if (hashAtual && saltAtual) {
-      return { valido: hashPin(pin, saltAtual) === hashAtual };
+      return _respostaValidacaoPin(hashPin(pin, saltAtual) === hashAtual, tecnicoId);
     }
 
     // Ainda em texto puro (legado): valida contra a coluna PIN e, se
@@ -233,9 +233,20 @@ function validarPinTecnico(tecnicoId, pin) {
       sheet.getRange(i + 1, idxPin + 1).setValue('');
       Logger.log('PIN migrado para hash: Tecnico_ID=' + tecnicoId);
     }
-    return { valido: ok };
+    return _respostaValidacaoPin(ok, tecnicoId);
   }
   return { valido: false, erro: 'Tecnico nao encontrado' };
+}
+
+// Anexa o token de sessao (Opcao A, ver emitirTokenSessao em Código.js)
+// na resposta de PIN correto -- aditivo, quem so olha .valido nao quebra.
+// Sem SESSAO_HMAC_SECRET configurado, emitirTokenSessao devolve null e o
+// login continua funcionando sem token (fase de transicao do rollout,
+// ver PLANO-ROLLOUT-OPCAO-A-TOKEN-SESSAO.md).
+function _respostaValidacaoPin(valido, tecnicoId) {
+  if (!valido) return { valido: false };
+  const sessao = emitirTokenSessao(tecnicoId);
+  return sessao ? { valido: true, token: sessao.token, expiraEm: sessao.expiraEm } : { valido: true };
 }
 
 // ─── Teste manual — confirma que o roteador está funcionando ────
