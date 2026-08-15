@@ -1226,31 +1226,61 @@ function _recusa(operationId, erro, extras) {
 }
 
 // ─── encontrarOuCriarLinhaDiaria ──────────────────────────────────
+// Achado da varredura de TOCTOU (Cowork 2, 15/08 -- 3a+ ocorrencia do
+// mesmo padrao no dia, elevado a prioridade real): find-or-create
+// classico, sem lock. Duas chamadas quase simultaneas pro MESMO
+// tecnico+dia (2 operationId, ex.: iniciarOS e registrarUsoVeiculo
+// disparados quase juntos) podiam ambas NAO encontrar a linha do dia
+// (nenhuma tinha dado append ainda) e ambas criarem uma linha nova --
+// 2 linhas de Diaria_Tecnico pro mesmo tecnico no mesmo dia, corrompendo
+// agregacao de horas/pagamento. Fix: toda a decisao (achar OU criar)
+// roda sob lock -- a 2a chamada, depois de esperar a 1a liberar,
+// encontra a linha que a 1a acabou de criar, em vez de criar outra.
 function encontrarOuCriarLinhaDiaria(sheet, tecnicoId, hoje) {
-  const dados = sheet.getDataRange().getValues();
-  for (let i = 1; i < dados.length; i++) {
-    const dataLinha = dados[i][0] instanceof Date
-      ? Utilities.formatDate(dados[i][0], TZ, 'yyyy-MM-dd')
-      : String(dados[i][0]).substring(0, 10);
-    if (dataLinha === hoje && String(dados[i][1]) === String(tecnicoId)) return i + 1;
-  }
-  // Criar nova linha
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  const tecSheet = ss.getSheetByName('Tecnicos_MEI');
-  let tecNome = '';
-  if (tecSheet) {
-    const td = tecSheet.getDataRange().getValues();
-    const h = td[0];
-    const idxId = h.indexOf('ID_Tecnico');
-    const idxNome = h.indexOf('Nome');
-    for (let i = 1; i < td.length; i++) {
-      if (String(td[i][idxId >= 0 ? idxId : 0]) === String(tecnicoId)) {
-        tecNome = String(td[i][idxNome >= 0 ? idxNome : 1]); break;
+  const resultado = _comLockDeOS(() => {
+    const dados = sheet.getDataRange().getValues();
+    for (let i = 1; i < dados.length; i++) {
+      const dataLinha = dados[i][0] instanceof Date
+        ? Utilities.formatDate(dados[i][0], TZ, 'yyyy-MM-dd')
+        : String(dados[i][0]).substring(0, 10);
+      if (dataLinha === hoje && String(dados[i][1]) === String(tecnicoId)) return i + 1;
+    }
+    // Criar nova linha
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const tecSheet = ss.getSheetByName('Tecnicos_MEI');
+    let tecNome = '';
+    if (tecSheet) {
+      const td = tecSheet.getDataRange().getValues();
+      const h = td[0];
+      const idxId = h.indexOf('ID_Tecnico');
+      const idxNome = h.indexOf('Nome');
+      for (let i = 1; i < td.length; i++) {
+        if (String(td[i][idxId >= 0 ? idxId : 0]) === String(tecnicoId)) {
+          tecNome = String(td[i][idxNome >= 0 ? idxNome : 1]); break;
+        }
       }
     }
+    sheet.appendRow([hoje, tecnicoId, tecNome, '', '', 0, 0, 0, 0, '', '', 0, 'Em campo', 0, '']);
+    return sheet.getLastRow();
+  });
+  // Sem lock obtido: melhor esforco, cai pro comportamento antigo (sem
+  // lock) em vez de quebrar a chamada inteira -- mesmo espirito de
+  // "Sistema ocupado" das outras guardas, mas esta funcao nao tem
+  // operationId/_recusa no proprio escopo pra devolver esse envelope
+  // (e' um helper interno, chamado de dentro de outras fn()); scan
+  // direto e' o fallback mais seguro disponivel aqui.
+  if (!resultado.lockObtido) {
+    const dados = sheet.getDataRange().getValues();
+    for (let i = 1; i < dados.length; i++) {
+      const dataLinha = dados[i][0] instanceof Date
+        ? Utilities.formatDate(dados[i][0], TZ, 'yyyy-MM-dd')
+        : String(dados[i][0]).substring(0, 10);
+      if (dataLinha === hoje && String(dados[i][1]) === String(tecnicoId)) return i + 1;
+    }
+    sheet.appendRow([hoje, tecnicoId, '', '', '', 0, 0, 0, 0, '', '', 0, 'Em campo', 0, '']);
+    return sheet.getLastRow();
   }
-  sheet.appendRow([hoje, tecnicoId, tecNome, '', '', 0, 0, 0, 0, '', '', 0, 'Em campo', 0, '']);
-  return sheet.getLastRow();
+  return resultado.valor;
 }
 
 // ─── calcularHoras ────────────────────────────────────────────────
@@ -1591,6 +1621,14 @@ function registrarUsoVeiculo(tecnicoId, usaVeiculo) {
 }
 
 // ─── iniciarOS ───────────────────────────────────────────────────
+// Achado da varredura de TOCTOU (Cowork 2, 15/08): antes desta correcao
+// NAO HAVIA NENHUMA checagem do Status atual -- nem sob lock, nem fora.
+// Uma 2a chamada (duplo-toque, retry com operationId novo, 2
+// dispositivos) reescrevia Hora_Inicio pro momento da 2a chamada
+// (perdendo a hora real de inicio) e duplicava o segmento 'Inicio' +
+// a entrada 'entrada' na diaria -- mesmo dano do TOCTOU ja corrigido em
+// encerrarOS, só que sem nem precisar de corrida de verdade (uma 2a
+// chamada SEQUENCIAL, sem lock nenhum, ja bastava).
 function iniciarOS(osId, tecnicoId, tecnicoNome, local) {
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(null, posse.erro);
@@ -1601,8 +1639,24 @@ function iniciarOS(osId, tecnicoId, tecnicoNome, local) {
   const osRow = encontrarLinha(osSheet, osId, 0);
   if (!osRow) return _recusa(null, 'OS nao encontrada: ' + osId);
 
+  // Guarda atomica: reconfirma+reserva o Status sob lock, mesmo
+  // principio ja usado no fix de encerrarOS -- fecha tanto a corrida
+  // quanto o caso mais simples (2a chamada sequencial sem lock nenhum).
+  const colStatusGuard = getCol('Status');
+  const guarda = _comLockDeOS(() => {
+    const statusAgora = colStatusGuard ? osSheet.getRange(osRow, colStatusGuard).getValue() : '';
+    if (statusAgora === 'Em Andamento' || statusAgora === 'Concluída' || statusAgora === 'Cancelada') {
+      return statusAgora;
+    }
+    if (colStatusGuard) osSheet.getRange(osRow, colStatusGuard).setValue('Em Andamento');
+    return null;
+  });
+  if (!guarda.lockObtido) return _recusa(null, 'Sistema ocupado, tente novamente em instantes');
+  if (guarda.valor) {
+    return _recusa(null, 'OS ja esta "' + guarda.valor + '" - nao pode ser iniciada de novo');
+  }
+
   const updates = {
-    'Status': 'Em Andamento',
     'Status_Atual': 'Em andamento',
     'Hora_Inicio': now,
     'Em_Pausa_Agora': false
@@ -1642,6 +1696,14 @@ function encerrarOSComGeo(osId, tecnicoId, tecnicoNome, dadosEnc, lat, lng) {
 }
 
 // ─── pausarOS ────────────────────────────────────────────────────
+// Achado da varredura de TOCTOU (Cowork 2, 15/08): nenhuma checagem de
+// Em_Pausa_Agora existia antes desta correcao. Uma 2a chamada (corrida
+// ou duplo-toque) recalculava horasSeg a partir da MESMA referencia
+// (Hora_Ultima_Retomada/Hora_Inicio, que so retomarOS atualiza) e somava
+// esse valor DE NOVO em Horas_Produtivas -- dobrando horas remuneraveis
+// -- alem de incrementar Qtd_Interrupcoes e duplicar o segmento de
+// pausa. Fix: toda a sequencia (ler estado, calcular horas, escrever)
+// roda sob 1 lock, com guarda logo no inicio.
 function pausarOS(osId, tecnicoId, tecnicoNome, motivo, osInterrupcaoId, operationId, dispositivoId) {
   return executarIdempotente(operationId, 'APONTAMENTO', osId, tecnicoId, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -1650,47 +1712,64 @@ function pausarOS(osId, tecnicoId, tecnicoNome, motivo, osInterrupcaoId, operati
   const osRow = encontrarLinha(osSheet, osId, 0);
   if (!osRow) return _recusa(operationId, 'OS nao encontrada: ' + osId);
 
+  const colPausa = getCol('Em_Pausa_Agora');
   const colRet = getCol('Hora_Ultima_Retomada');
   const colIni = getCol('Hora_Inicio');
   const colProd = getCol('Horas_Produtivas');
   const colQtd = getCol('Qtd_Interrupcoes');
 
-  const ultimaRetomada = colRet ? osSheet.getRange(osRow, colRet).getValue() : null;
-  const horaInicio = colIni ? osSheet.getRange(osRow, colIni).getValue() : null;
-  const ref = (ultimaRetomada instanceof Date ? ultimaRetomada : null) ||
-              (horaInicio instanceof Date ? horaInicio : null);
-  const horasSeg = ref ? calcularHoras(ref, now) : 0;
+  const resultado = _comLockDeOS(() => {
+    const jaPausada = colPausa ? osSheet.getRange(osRow, colPausa).getValue() === true : false;
+    if (jaPausada) return { jaPausada: true };
 
-  const horasAcum = (parseFloat(colProd ? osSheet.getRange(osRow, colProd).getValue() : 0) || 0) + horasSeg;
-  const qtdPausas = (parseInt(colQtd ? osSheet.getRange(osRow, colQtd).getValue() : 0) || 0) + 1;
+    const ultimaRetomada = colRet ? osSheet.getRange(osRow, colRet).getValue() : null;
+    const horaInicio = colIni ? osSheet.getRange(osRow, colIni).getValue() : null;
+    const ref = (ultimaRetomada instanceof Date ? ultimaRetomada : null) ||
+                (horaInicio instanceof Date ? horaInicio : null);
+    const horasSeg = ref ? calcularHoras(ref, now) : 0;
 
-  const updates = {
-    'Em_Pausa_Agora': true,
-    'Motivo_Pausa_Atual': motivo,
-    'Hora_Ultima_Pausa': now,
-    'Horas_Produtivas': horasAcum,
-    'Qtd_Interrupcoes': qtdPausas,
-    'Status_Atual': 'Pausada - ' + motivo
-  };
-  if (osInterrupcaoId) updates['OS_Interrupcao_ID'] = osInterrupcaoId;
+    const horasAcum = (parseFloat(colProd ? osSheet.getRange(osRow, colProd).getValue() : 0) || 0) + horasSeg;
+    const qtdPausas = (parseInt(colQtd ? osSheet.getRange(osRow, colQtd).getValue() : 0) || 0) + 1;
 
-  Object.keys(updates).forEach(campo => {
-    const col = getCol(campo);
-    if (col) osSheet.getRange(osRow, col).setValue(updates[campo]);
+    const updates = {
+      'Em_Pausa_Agora': true,
+      'Motivo_Pausa_Atual': motivo,
+      'Hora_Ultima_Pausa': now,
+      'Horas_Produtivas': horasAcum,
+      'Qtd_Interrupcoes': qtdPausas,
+      'Status_Atual': 'Pausada - ' + motivo
+    };
+    if (osInterrupcaoId) updates['OS_Interrupcao_ID'] = osInterrupcaoId;
+
+    Object.keys(updates).forEach(campo => {
+      const col = getCol(campo);
+      if (col) osSheet.getRange(osRow, col).setValue(updates[campo]);
+    });
+
+    registrarSegmento(ss, osId, tecnicoId, tecnicoNome,
+      'Pausa - ' + motivo, now, horasSeg * 60, horasAcum, '');
+
+    return { jaPausada: false, horasAcum: horasAcum };
   });
 
-  registrarSegmento(ss, osId, tecnicoId, tecnicoNome,
-    'Pausa - ' + motivo, now, horasSeg * 60, horasAcum, '');
+  if (!resultado.lockObtido) return _recusa(operationId, 'Sistema ocupado, tente novamente em instantes');
+  if (resultado.valor.jaPausada) return _recusa(operationId, 'OS ja esta pausada');
 
   return {
     sucesso: true,
     hora: formatarHora(now),
-    horasAcumuladas: formatarDuracao(horasAcum)
+    horasAcumuladas: formatarDuracao(resultado.valor.horasAcum)
   };
   });
 }
 
 // ─── retomarOS ───────────────────────────────────────────────────
+// Achado da varredura de TOCTOU (Cowork 2, 15/08): nenhuma checagem de
+// Em_Pausa_Agora existia -- nem que a OS estivesse REALMENTE pausada
+// antes de retomar (retomar uma OS ja em andamento nao devia fazer
+// nada), nem contra corrida (2 chamadas quase simultaneas inflando
+// Qtd_Retomadas e duplicando o segmento 'Retomada'). Fix: mesmo padrao
+// de pausarOS -- toda a sequencia sob 1 lock, guarda logo no inicio.
 function retomarOS(osId, tecnicoId, tecnicoNome, operationId, dispositivoId) {
   return executarIdempotente(operationId, 'APONTAMENTO', osId, tecnicoId, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -1699,29 +1778,41 @@ function retomarOS(osId, tecnicoId, tecnicoNome, operationId, dispositivoId) {
   const osRow = encontrarLinha(osSheet, osId, 0);
   if (!osRow) return _recusa(operationId, 'OS nao encontrada: ' + osId);
 
+  const colPausa = getCol('Em_Pausa_Agora');
   const colProd = getCol('Horas_Produtivas');
   const colQtdRet = getCol('Qtd_Retomadas');
-  const horasAcum = parseFloat(colProd ? osSheet.getRange(osRow, colProd).getValue() : 0) || 0;
-  const qtdRet = (parseInt(colQtdRet ? osSheet.getRange(osRow, colQtdRet).getValue() : 0) || 0) + 1;
 
-  const updates = {
-    'Em_Pausa_Agora': false,
-    'Motivo_Pausa_Atual': '',
-    'Hora_Ultima_Retomada': now,
-    'Status_Atual': 'Em andamento',
-    'Qtd_Retomadas': qtdRet
-  };
-  Object.keys(updates).forEach(campo => {
-    const col = getCol(campo);
-    if (col) osSheet.getRange(osRow, col).setValue(updates[campo]);
+  const resultado = _comLockDeOS(() => {
+    const estaPausada = colPausa ? osSheet.getRange(osRow, colPausa).getValue() === true : false;
+    if (!estaPausada) return { naoPausada: true };
+
+    const horasAcum = parseFloat(colProd ? osSheet.getRange(osRow, colProd).getValue() : 0) || 0;
+    const qtdRet = (parseInt(colQtdRet ? osSheet.getRange(osRow, colQtdRet).getValue() : 0) || 0) + 1;
+
+    const updates = {
+      'Em_Pausa_Agora': false,
+      'Motivo_Pausa_Atual': '',
+      'Hora_Ultima_Retomada': now,
+      'Status_Atual': 'Em andamento',
+      'Qtd_Retomadas': qtdRet
+    };
+    Object.keys(updates).forEach(campo => {
+      const col = getCol(campo);
+      if (col) osSheet.getRange(osRow, col).setValue(updates[campo]);
+    });
+
+    registrarSegmento(ss, osId, tecnicoId, tecnicoNome, 'Retomada', now, 0, horasAcum, '');
+
+    return { naoPausada: false, horasAcum: horasAcum };
   });
 
-  registrarSegmento(ss, osId, tecnicoId, tecnicoNome, 'Retomada', now, 0, horasAcum, '');
+  if (!resultado.lockObtido) return _recusa(operationId, 'Sistema ocupado, tente novamente em instantes');
+  if (resultado.valor.naoPausada) return _recusa(operationId, 'OS nao esta pausada');
 
   return {
     sucesso: true,
     hora: formatarHora(now),
-    horasAcumuladas: formatarDuracao(horasAcum)
+    horasAcumuladas: formatarDuracao(resultado.valor.horasAcum)
   };
   });
 }
@@ -2774,7 +2865,10 @@ function registrarMovimentoFerramental(osId, tecnicoId, patrimonioCodigo, tipoMo
       tipoMovimento,
       estadoOk === true,
       observacao || '',
-      new Date(),
+      // .toISOString() (texto), NAO Date nativo -- achado adjacente da
+      // varredura de TOCTOU (15/08), mesma classe de bug ja corrigida
+      // repetidas vezes em Log_Central/Ordens_Servico/Alocacoes_Ofertas.
+      new Date().toISOString(),
       operationId || ''
     ]);
 
