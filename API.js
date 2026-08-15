@@ -68,7 +68,8 @@ function executarAcao(action, p) {
     case 'getOsDoTecnico':
       return getOsDoTecnico(p[0]);
     case 'iniciarOSComGeo':
-      return iniciarOSComGeo(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+      // p[8]=token (Onda 1, Opcao A) -- opcional.
+      return iniciarOSComGeo(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]);
     // Frente D (idempotência) — últimos 2 params são operationId/
     // dispositivoId em todo case abaixo que ganhou o tratamento;
     // opcionais, chamador antigo sem eles continua funcionando.
@@ -77,7 +78,8 @@ function executarAcao(action, p) {
     case 'retomarOS':
       return retomarOS(p[0], p[1], p[2], p[3], p[4]);
     case 'encerrarOS':
-      return encerrarOS(p[0], p[1], p[2], p[3]);
+      // p[4]=token (Onda 1, Opcao A) -- opcional.
+      return encerrarOS(p[0], p[1], p[2], p[3], p[4]);
     case 'criarOSEmergencia':
       return criarOSEmergencia(p[0]);
     case 'getProximaPergunta':
@@ -86,7 +88,8 @@ function executarAcao(action, p) {
       // p[10]=tecnicoId (posse, Frente E) -- opcional, chamador antigo sem
       // ele continua funcionando (verificarPosseOS recusa fail-closed se
       // vier undefined, nao quebra o dispatch em si).
-      return salvarResposta(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10]);
+      // p[11]=token (Onda 1, Opcao A) -- opcional.
+      return salvarResposta(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11]);
     case 'getVeiculoDoTecnico':
       return getVeiculoDoTecnico(p[0]);
     case 'cadastrarOuEditarVeiculo':
@@ -103,13 +106,16 @@ function executarAcao(action, p) {
     // encerrarOSComKM tem 6 parâmetros posicionais (p[0]..p[5]) — o KM final NÃO
     // entra aqui, é preenchido depois via registrarKMFinalPendente.
     case 'iniciarOSComKM':
-      return iniciarOSComKM(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11]);
+      // p[12]=token (Onda 1, Opcao A) -- opcional.
+      return iniciarOSComKM(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12]);
     case 'encerrarOSComKM':
       // p[6]=operationId, p[7]=dispositivoId — Frente D (idempotência).
       // Ambos opcionais: chamador antigo sem eles continua funcionando.
-      return encerrarOSComKM(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+      // p[8]=token (Onda 1, Opcao A) -- opcional.
+      return encerrarOSComKM(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]);
     case 'registrarKMFinalPendente':
-      return registrarKMFinalPendente(p[0], p[1], p[2], p[3], p[4], p[5], p[6]);
+      // p[7]=token (Onda 1, Opcao A) -- opcional.
+      return registrarKMFinalPendente(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
     case 'getOSsPendentesKMFinal':
       return getOSsPendentesKMFinal(p[0]);
     // Leitor genérico, só leitura — usado pra verificação por releitura em
@@ -144,9 +150,11 @@ function executarAcao(action, p) {
     // salvarArquivoOS chega via POST (base64 estoura limite de URL de
     // GET/JSONP) — doPost já cai no mesmo executarAcao, sem caso especial.
     case 'salvarArquivoOS':
-      return salvarArquivoOS(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+      // p[8]=token (Onda 1, Opcao A) -- opcional.
+      return salvarArquivoOS(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]);
     case 'confirmarSegurancaPreExecucao':
-      return confirmarSegurancaPreExecucao(p[0], p[1], p[2], p[3], p[4], p[5]);
+      // p[6]=token (Onda 1, Opcao A) -- opcional.
+      return confirmarSegurancaPreExecucao(p[0], p[1], p[2], p[3], p[4], p[5], p[6]);
     // Poll pós-upload (POST no-cors não deixa ler a resposta do POST em
     // si) — GET/JSONP normal, corpo pequeno.
     case 'consultarStatusOperacao':
@@ -162,13 +170,15 @@ function executarAcao(action, p) {
     // diário do técnico. Chega via POST (mesmo motivo do salvarArquivoOS
     // — base64 da selfie estoura limite de URL de GET/JSONP).
     case 'salvarSelfieEPI':
-      return salvarSelfieEPI(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+      // p[8]=token (Onda 1, Opcao A) -- opcional.
+      return salvarSelfieEPI(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]);
     // Checklist 3 fases (CONTRATO-BACKEND-CHECKLIST-3-FASES.md, sessao de
     // frontend) — fecha uma fase no servidor (grava Estado_Seguranca ou
     // Checklist_Execucao_Completo quando a fase completa) e le o status
     // atual das fases direto do servidor.
     case 'fecharFaseChecklist':
-      return fecharFaseChecklist(p[0], p[1], p[2], p[3], p[4]);
+      // p[5]=token (Onda 1, Opcao A) -- opcional.
+      return fecharFaseChecklist(p[0], p[1], p[2], p[3], p[4], p[5]);
     case 'consultarFaseChecklist':
       return consultarFaseChecklist(p[0]);
     // Aceite de oferta via link profundo (CONTRATO-BACKEND-ACEITE-OFERTA.md).
@@ -182,7 +192,8 @@ function executarAcao(action, p) {
       return criarOfertaAlocacao(p[0], p[1], p[2], p[3], p[4]);
     // Ferramental — carga/desmobilizacao (CONTRATO-BACKEND-FERRAMENTAL.md).
     case 'registrarMovimentoFerramental':
-      return registrarMovimentoFerramental(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+      // p[8]=token (Onda 1, Opcao A) -- opcional.
+      return registrarMovimentoFerramental(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]);
     case 'getFerramentalDaOS':
       return getFerramentalDaOS(p[0]);
     default:

@@ -926,9 +926,17 @@ function _pastaEvidenciasOS() {
 // app-side nenhum jeito de cumprir a exigencia de foto).
 const CAMPOS_ARQUIVO_PERMITIDOS = ['Laudo_URL', 'Assinatura_URL', 'KM_Foto_Desvio_URL'];
 
-function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArquivo, operationId, dispositivoId) {
+function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArquivo, operationId, dispositivoId, token) {
   if (CAMPOS_ARQUIVO_PERMITIDOS.indexOf(campo) < 0) {
     return _recusa(operationId, 'Campo nao permitido: ' + campo);
+  }
+  // Onda 1 do rollout do token de sessao (Opcao A, E-TOCTOU-01,
+  // PLANO-ROLLOUT-OPCAO-A-TOKEN-SESSAO.md) -- opcional durante a
+  // transicao: chamador antigo sem token continua funcionando, so quem
+  // manda token errado/expirado/de outro tecnico e recusado.
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(operationId, identidade.erro);
   }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
@@ -979,7 +987,11 @@ function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArqui
 // real desta coluna — isto aqui nao e a versao final.
 const CONFIRMACOES_SEGURANCA_MIN = ['epi', 'aterramento', 'bloqueio_energia', 'sinalizacao_area'];
 
-function confirmarSegurancaPreExecucao(osId, tecnicoId, confirmacoes, temNaoConformidade, operationId, dispositivoId) {
+function confirmarSegurancaPreExecucao(osId, tecnicoId, confirmacoes, temNaoConformidade, operationId, dispositivoId, token) {
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+  }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
   // tipo_operacao pro Log_Central: a lista fechada aprovada (Geovane/
@@ -1029,7 +1041,11 @@ function confirmarSegurancaPreExecucao(osId, tecnicoId, confirmacoes, temNaoConf
 // pra isso). Vale o dono conferir/ajustar a lista antes do deploy.
 const EPI_ITENS_MIN = ['capacete', 'luvas_isolantes', 'oculos_protecao', 'calcado_seguranca', 'cinto_seguranca'];
 
-function salvarSelfieEPI(osId, tecnicoId, base64Selfie, mimeType, epiChecklist, diarioTexto, operationId, dispositivoId) {
+function salvarSelfieEPI(osId, tecnicoId, base64Selfie, mimeType, epiChecklist, diarioTexto, operationId, dispositivoId, token) {
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+  }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
   // tipo_operacao pro Log_Central: sem categoria propria "selfie" na
@@ -1660,7 +1676,11 @@ function registrarUsoVeiculo(tecnicoId, usaVeiculo) {
 // a entrada 'entrada' na diaria -- mesmo dano do TOCTOU ja corrigido em
 // encerrarOS, só que sem nem precisar de corrida de verdade (uma 2a
 // chamada SEQUENCIAL, sem lock nenhum, ja bastava).
-function iniciarOS(osId, tecnicoId, tecnicoNome, local) {
+function iniciarOS(osId, tecnicoId, tecnicoNome, local, token) {
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(null, identidade.erro);
+  }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(null, posse.erro);
 
@@ -1706,12 +1726,12 @@ function iniciarOS(osId, tecnicoId, tecnicoNome, local) {
 // ─── iniciarOSComGeo ─────────────────────────────────────────────
 // Versao de iniciarOS com coordenadas GPS do navegador.
 // Local_Evento em OS_Segmentos recebe "descricao [lat,lng]".
-function iniciarOSComGeo(osId, tecnicoId, tecnicoNome, local, lat, lng, operationId, dispositivoId) {
+function iniciarOSComGeo(osId, tecnicoId, tecnicoNome, local, lat, lng, operationId, dispositivoId, token) {
   return executarIdempotente(operationId, 'APONTAMENTO', osId, tecnicoId, dispositivoId, () => {
     const localComGeo = (lat && lng)
       ? ((local ? local + ' ' : '') + '[' + lat + ',' + lng + ']')
       : (local || '');
-    return iniciarOS(osId, tecnicoId, tecnicoNome, localComGeo);
+    return iniciarOS(osId, tecnicoId, tecnicoNome, localComGeo, token);
   });
 }
 
@@ -1977,7 +1997,11 @@ function canCloseOS(osId, dadosPendentes) {
 // Status ja 'Concluída'/'Cancelada' aqui dentro e e recusada com a
 // MESMA mensagem que canCloseOS ja usa pro 4o... 5o motivo -- nunca
 // chega a rodar registrarSegmento/atualizarDiaria uma 2a vez.
-function encerrarOS(osId, tecnicoId, tecnicoNome, dadosEnc) {
+function encerrarOS(osId, tecnicoId, tecnicoNome, dadosEnc, token) {
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(null, identidade.erro);
+  }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(null, posse.erro);
 
@@ -2329,7 +2353,11 @@ function lerAbaCompleta(nomeAba) {
 // sem isso, o frontend atual (que nao envia tecnicoId) teria toda
 // chamada recusada por posse indeterminada (fail-closed, deliberado).
 function salvarResposta(osId, idSharePointOS, perguntaId, textoPergunta,
-                        resposta, fotoUrl, tecnico, geraNC, operationId, dispositivoId, tecnicoId) {
+                        resposta, fotoUrl, tecnico, geraNC, operationId, dispositivoId, tecnicoId, token) {
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+  }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
   return executarIdempotente(operationId, 'CHECKLIST_RESPOSTA', osId, tecnicoId, dispositivoId, () => {
@@ -2432,7 +2460,11 @@ function _ultimaRespostaPorPergunta(respostas, idxPerg, idxTimestamp) {
   return porPergunta;
 }
 
-function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) {
+function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId, token) {
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+  }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
 
@@ -2927,7 +2959,7 @@ const FERRAMENTAL_TIPOS_VALIDOS = ['Carga', 'Desmobilizacao'];
 // literal do contrato -- sinalizado aqui e no relatorio pro Geovane,
 // nao escolhido silenciosamente. Se 'FERRAMENTAL' for aprovado como
 // valor novo depois, e so adicionar na lista e trocar esta linha.
-function registrarMovimentoFerramental(osId, tecnicoId, patrimonioCodigo, tipoMovimento, estadoOk, observacao, operationId, dispositivoId) {
+function registrarMovimentoFerramental(osId, tecnicoId, patrimonioCodigo, tipoMovimento, estadoOk, observacao, operationId, dispositivoId, token) {
   if (FERRAMENTAL_TIPOS_VALIDOS.indexOf(tipoMovimento) < 0) {
     return _recusa(operationId, 'Tipo de movimento invalido: ' + tipoMovimento);
   }
@@ -2938,6 +2970,10 @@ function registrarMovimentoFerramental(osId, tecnicoId, patrimonioCodigo, tipoMo
     return _recusa(operationId, 'Observacao obrigatoria quando o estado nao esta OK');
   }
 
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+  }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
 
@@ -3249,13 +3285,13 @@ function validarESalvarKMInicial(osId, tecnicoId, kmInicial, veiculoId, justific
 
 // ─── iniciarOSComKM ────────────────────────────────────────────────
 // Aditivo: convive com iniciarOSComGeo, não a substitui ainda.
-function iniciarOSComKM(osId, tecnicoId, tecnicoNome, local, lat, lng, kmInicial, veiculoId, justificativaDesvio, fotoDesvioUrl, operationId, dispositivoId) {
+function iniciarOSComKM(osId, tecnicoId, tecnicoNome, local, lat, lng, kmInicial, veiculoId, justificativaDesvio, fotoDesvioUrl, operationId, dispositivoId, token) {
   return executarIdempotente(operationId, 'REGISTRO_KM', osId, tecnicoId, dispositivoId, () => {
     const kmResult = validarESalvarKMInicial(osId, tecnicoId, kmInicial, veiculoId, justificativaDesvio, fotoDesvioUrl, operationId);
     if (kmResult.erro || kmResult.exigeJustificativa) return kmResult;
 
     const localComGeo = (lat && lng) ? ((local ? local + ' ' : '') + '[' + lat + ',' + lng + ']') : (local || '');
-    const res = iniciarOS(osId, tecnicoId, tecnicoNome, localComGeo);
+    const res = iniciarOS(osId, tecnicoId, tecnicoNome, localComGeo, token);
     if (!res.erro) res.kmFlag = kmResult.flag || null;
     return res;
   });
@@ -3268,25 +3304,29 @@ function iniciarOSComKM(osId, tecnicoId, tecnicoNome, local, lat, lng, kmInicial
 // operationId/dispositivoId no final (backward-compat posicional —
 // chamador antigo sem esses 2 args continua funcionando, só sem
 // idempotencia). Ver bloco executarIdempotente/Log_Central (Frente D).
-function encerrarOSComKM(osId, tecnicoId, tecnicoNome, dadosEnc, lat, lng, operationId, dispositivoId) {
+function encerrarOSComKM(osId, tecnicoId, tecnicoNome, dadosEnc, lat, lng, operationId, dispositivoId, token) {
   return executarIdempotente(operationId, 'CONCLUSAO_OS', osId, tecnicoId, dispositivoId, () => {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     if (lat && lng) {
       registrarSegmento(ss, osId, tecnicoId, tecnicoNome, 'GPS_Saida', new Date(), 0, 0, '[' + lat + ',' + lng + ']');
     }
-    return encerrarOS(osId, tecnicoId, tecnicoNome, dadosEnc);
+    return encerrarOS(osId, tecnicoId, tecnicoNome, dadosEnc, token);
   });
 }
 
 // ─── registrarKMFinalPendente ────────────────────────────────────────
 // Preenche o KM final de uma OS já concluída, sem reabrir nada.
 // Roda a mesma validacao de desvio (foto+texto) que o KM inicial usa.
-function registrarKMFinalPendente(osId, tecnicoId, kmFinal, justificativaDesvio, fotoDesvioUrl, operationId, dispositivoId) {
+function registrarKMFinalPendente(osId, tecnicoId, kmFinal, justificativaDesvio, fotoDesvioUrl, operationId, dispositivoId, token) {
   // Achado do cross-check do plano de deploy (13/08): faltava posse aqui --
   // mesmo padrao ja usado em salvarArquivoOS/confirmarSegurancaPreExecucao/
   // salvarSelfieEPI/iniciarOS/encerrarOS/fecharFaseChecklist/
   // registrarMovimentoFerramental. Sem isso, qualquer tecnicoId valido
   // fechava o KM final de uma OS que nao era dele.
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+  }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
   return executarIdempotente(operationId, 'REGISTRO_KM', osId, tecnicoId, dispositivoId, () => {
