@@ -1696,10 +1696,15 @@ function retomarOS(osId, tecnicoId, tecnicoNome, operationId, dispositivoId) {
 // fazer o deploy desta mudança.
 const PISO_FOTOS_FECHAMENTO_PWA = 2; // mesmo piso fail-closed (MIN_FOTOS_HARDCODED) do admin; aqui não há matriz de exigências acessível (ela vive no SharePoint), então o piso É o critério, não um fallback eventual.
 
+// Achado red-team confirmado (Cowork 2, 14/08): sem dedupe, a MESMA URL
+// repetida 2x no campo satisfazia o piso de 2 fotos como se fossem 2
+// evidencias diferentes. Set() sobre as URLs validas fecha isso -- conta
+// fotos UNICAS, nao ocorrencias de texto.
 function contarFotosEvidencia(nota) {
   if (!nota) return 0;
-  return String(nota).split(/[\n,;]+/).map(s => s.trim())
-    .filter(s => /^https?:\/\//i.test(s)).length;
+  const urls = String(nota).split(/[\n,;]+/).map(s => s.trim())
+    .filter(s => /^https?:\/\//i.test(s));
+  return new Set(urls).size;
 }
 
 // dadosPendentes (opcional): valores AINDA NAO GRAVADOS que vao ser
@@ -1778,6 +1783,27 @@ function canCloseOS(osId, dadosPendentes) {
 }
 
 // ─── encerrarOS ──────────────────────────────────────────────────
+// Achado red-team confirmado (Cowork 2, 14/08, TOCTOU): o precheck de
+// canCloseOS logo abaixo e' fresco (le a planilha na hora, nao confia em
+// nenhum resultado de chamada anterior) -- mas roda SEM lock, mesmo
+// principio de "fn() fora do lock" do ajuste 4 do auditor (Frente D).
+// Isso deixa uma janela real: duas chamadas quase simultaneas pra MESMA
+// OS (2 operationId diferentes, ou 2 dispositivos, ou um duplo-toque
+// que a UI nao debounced) podem AMBAS ler o estado "ainda nao fechada"
+// ANTES de qualquer uma escrever -- as duas passam no precheck, as duas
+// prosseguem, e o resultado nao e so "a OS fecha" (isso seria inofensivo
+// -- fechar 2x com o mesmo dado final): e' registrarSegmento() e
+// atualizarDiaria() rodando 2x, duplicando o segmento de auditoria e
+// somando Horas_Produtivas/diaria em dobro.
+//
+// Fix: trava CURTA, so pra reconfirmar+reservar o fechamento
+// atomicamente (mesma disciplina de escopo minimo de lock ja usada em
+// executarIdempotente -- nao trava a funcao inteira, so este guard).
+// Se por acaso outra execucao ja fechou a OS entre o precheck (sem
+// lock, acima) e este guard (com lock), a segunda chamada encontra
+// Status ja 'Concluída'/'Cancelada' aqui dentro e e recusada com a
+// MESMA mensagem que canCloseOS ja usa pro 4o... 5o motivo -- nunca
+// chega a rodar registrarSegmento/atualizarDiaria uma 2a vez.
 function encerrarOS(osId, tecnicoId, tecnicoNome, dadosEnc) {
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(null, posse.erro);
@@ -1792,6 +1818,22 @@ function encerrarOS(osId, tecnicoId, tecnicoNome, dadosEnc) {
   const osSheet = ss.getSheetByName('Ordens_Servico');
   const osRow = encontrarLinha(osSheet, osId, 0);
   if (!osRow) return _recusa(null, 'OS nao encontrada: ' + osId);
+
+  const colStatusGuard = getCol('Status');
+  const guarda = _comLockDeOS(() => {
+    const statusAgora = colStatusGuard ? osSheet.getRange(osRow, colStatusGuard).getValue() : '';
+    if (statusAgora === 'Concluída' || statusAgora === 'Cancelada') return statusAgora;
+    // Reserva o fechamento AGORA, sob lock -- fecha a janela de corrida.
+    // O resto da funcao (updates abaixo) sobrescreve 'Status' com o
+    // mesmo valor final, sem custo real (nao e' um 3o estado transitorio).
+    if (colStatusGuard) osSheet.getRange(osRow, colStatusGuard).setValue('Concluída');
+    return null;
+  });
+  if (!guarda.lockObtido) return _recusa(null, 'Sistema ocupado, tente novamente em instantes');
+  if (guarda.valor) {
+    const motivo = 'OS ja esta "' + guarda.valor + '" - conclusao ja ocorreu ou foi cancelada';
+    return _recusa(null, 'OS nao pode ser concluida ainda', { blockingReasons: [motivo], blocking_reasons: [motivo] });
+  }
 
   const colEmPausa = getCol('Em_Pausa_Agora');
   const colProd = getCol('Horas_Produtivas');
@@ -2175,6 +2217,36 @@ const FASES_CHECKLIST_VALIDAS = ['Pré-Execução', 'Execução', 'Pós-Execuç�
 // de qualquer checagem. Empate ou Timestamp ausente (nao deveria
 // acontecer, mas nao trava) cai pra "ultima no array" (ordem de
 // insercao do appendRow), que e o proximo melhor sinal disponivel.
+// _perguntaAlcancavel -- espelha a navegacao de getProximaPergunta
+// (Pergunta_Pai/Condicao_Exibicao, mesmas colunas reais de
+// Perguntas_Checklist): uma pergunta so e' genuinamente EXIGIVEL se o
+// caminho ate ela (pai, avo, etc.) foi realmente percorrido com as
+// respostas que levam a esse ramo especifico.
+//
+// Achado red-team confirmado (Cowork 2, 14/08): fecharFaseChecklist
+// ANTES desta funcao so filtrava Fase_Execucao/Ativo/Obrigatoria, flat,
+// SEM olhar Pergunta_Pai/Condicao_Exibicao -- o motor CHKV2
+// (index.html, N3_TIPO/N4_*) tem VARIOS ramos mutuamente exclusivos sob
+// a mesma Fase_Execucao (um tecnico so consegue percorrer 1 ramo por
+// vez, a escolha de N3_TIPO decide qual). Se qualquer pergunta de um
+// ramo NAO escolhido estivesse marcada Obrigatoria=true, ela entraria em
+// obrigatoriasDaFase mas NENHUM tecnico jamais conseguiria responde-la
+// (a UI nem mostra perguntas de ramos nao escolhidos) -- 'Execução'
+// ficaria travada PERMANENTEMENTE pra qualquer OS que usasse esse motor,
+// nao por falta de resposta real, mas por uma exigencia estruturalmente
+// impossivel de satisfazer. Corrigido: so conta como "faltando" uma
+// pergunta obrigatoria que o tecnico realmente PODERIA ter alcancado.
+function _perguntaAlcancavel(id, porIdPergunta, respostasPorId, idxPai, idxCond) {
+  const row = porIdPergunta[id];
+  if (!row) return false; // pergunta obrigatoria referenciada mas que nao existe mais na planilha -- nao alcancavel, nao pode travar
+  const paiId = idxPai >= 0 ? row[idxPai] : '';
+  if (!paiId) return true; // raiz (sem pai) -- sempre alcancavel, mesmo comportamento de sempre
+  if (!respostasPorId.hasOwnProperty(paiId)) return false; // pai nunca foi respondido -- este ramo nunca foi aberto
+  const condicao = idxCond >= 0 ? row[idxCond] : '';
+  if (condicao && condicao !== '' && condicao !== respostasPorId[paiId]) return false; // resposta real do pai nao leva a este ramo
+  return _perguntaAlcancavel(paiId, porIdPergunta, respostasPorId, idxPai, idxCond); // reachability e' transitiva -- sobe a cadeia inteira
+}
+
 function _ultimaRespostaPorPergunta(respostas, idxPerg, idxTimestamp) {
   const porPergunta = new Map();
   respostas.forEach(row => {
@@ -2209,6 +2281,13 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
     const idxObrig = pH.indexOf('Obrigatoria');
     const idxAtivo = pH.indexOf('Ativo');
     const idxIdPerg = pH.indexOf('ID_Pergunta');
+    // Pergunta_Pai/Condicao_Exibicao -- mesmas colunas que
+    // getProximaPergunta ja usa pra navegar o motor CHKV2 (N3_TIPO/N4_*,
+    // ramos mutuamente exclusivos). Opcionais aqui (idx<0 tratado como
+    // "sem pai" pra toda pergunta, reduz ao comportamento flat de
+    // sempre) -- so entram na jogada se a planilha ja as tiver.
+    const idxPai = pH.indexOf('Pergunta_Pai');
+    const idxCond = pH.indexOf('Condicao_Exibicao');
     if (idxFase < 0 || idxObrig < 0) {
       return _recusa(operationId, 'Colunas Fase_Execucao/Obrigatoria nao existem na planilha (rode rodarSetupSheets)');
     }
@@ -2220,6 +2299,8 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
     const obrigatoriasDaFase = pDados.slice(1)
       .filter(row => row[idxFase] === fase && ehVerdadeiro(row[idxAtivo]) && ehVerdadeiro(row[idxObrig]))
       .map(row => row[idxIdPerg]);
+    const porIdPergunta = {};
+    pDados.slice(1).forEach(row => { porIdPergunta[row[idxIdPerg]] = row; });
 
     const respSheet = ss.getSheetByName('Checklist_Respostas');
     if (!respSheet) return _recusa(operationId, 'Aba Checklist_Respostas nao encontrada');
@@ -2229,6 +2310,7 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
     const idxRPerg = rH.indexOf('Pergunta_ID');
     const idxRNC = rH.indexOf('Gerou_NC');
     const idxRTimestamp = rH.indexOf('Timestamp');
+    const idxRResposta = rH.indexOf('Resposta_Dada');
     const respostasDaOS = rDados.slice(1).filter(row => String(row[idxROS]) === String(osId));
     // So a resposta MAIS RECENTE por pergunta conta -- uma correcao
     // legitima (Timestamp novo) tem que substituir a resposta anterior
@@ -2236,8 +2318,16 @@ function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId) 
     // _ultimaRespostaPorPergunta.
     const ultimaPorPergunta = _ultimaRespostaPorPergunta(respostasDaOS, idxRPerg, idxRTimestamp);
     const idsRespondidos = Array.from(ultimaPorPergunta.keys());
+    const respostasPorId = {};
+    ultimaPorPergunta.forEach((row, id) => { respostasPorId[id] = idxRResposta >= 0 ? row[idxRResposta] : undefined; });
 
-    const faltando = obrigatoriasDaFase.filter(id => idsRespondidos.indexOf(id) < 0);
+    // So bloqueia por pergunta obrigatoria REALMENTE alcancavel pelo
+    // caminho que o proprio tecnico percorreu -- ver _perguntaAlcancavel
+    // (achado red-team, ramos mutuamente exclusivos nao podem travar a
+    // fase pra sempre).
+    const obrigatoriasAlcancaveis = obrigatoriasDaFase.filter(id =>
+      _perguntaAlcancavel(id, porIdPergunta, respostasPorId, idxPai, idxCond));
+    const faltando = obrigatoriasAlcancaveis.filter(id => idsRespondidos.indexOf(id) < 0);
     if (faltando.length) {
       return _recusa(operationId, 'Fase incompleta: faltam perguntas obrigatorias (' + faltando.join(', ') + ')',
         { completa: false, fase: fase, faltando: faltando, blocking_reasons: faltando });
