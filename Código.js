@@ -419,6 +419,57 @@ function _garantirColunasOutboxLogCentral(sheet) {
   // quando falta coluna), pra nao depender de detectar qual delas ficou
   // faltando.
   _aplicarValidacoesLogCentral(sheet, headers);
+  _normalizarTimestampsLogCentral(sheet, headers);
+}
+
+// _normalizarTimestampsLogCentral -- achado real (14/08, apoio ao
+// scanner de retry que a Cowork 1 esta montando, pergunta sobre formato
+// de data pra quem le Log_Central via Make). A PRIMEIRA versao deste
+// backend (commit aedc20e, antes do schema aprovado Geovane/Cowork 2 em
+// bbc16e9) gravava `criado_em`/`recebido_em`/`sincronizado_em` como Date
+// NATIVO do Apps Script, nao texto ISO 8601 -- o guard `setNumberFormat
+// ('@')` que protege essas colunas hoje so afeta ESCRITAS NOVAS numa
+// celula; ele NAO reconverte retroativamente uma celula que ja tem um
+// valor Date gravado (mudar o formato de exibicao de um valor existente
+// nao muda o tipo/conteudo dele -- e' comportamento documentado do
+// Sheets, nao um bug deste codigo). Se o Log_Central real coletou dado
+// durante essa janela (nao verificavel remotamente daqui, sem acesso a
+// planilha de producao), linhas antigas podem ter Date nativo nessas
+// colunas ate hoje, misturado com linhas novas (texto) na MESMA coluna.
+//
+// Quem le essas colunas via Make (Cowork 1, scanner de retry) precisaria
+// tratar os dois formatos na ponta dele -- ou este backend normaliza pra
+// texto de uma vez, fechando a mistura na fonte. Escolhido normalizar
+// aqui: mais simples exigir 1 formato de quem consome, e o backend e'
+// quem tem acesso direto ao tipo real de cada celula (Make so ve o que
+// o conector do Google Sheets devolve, que ja pode ter perdido a
+// distincao). Idempotente e' automatico via `_garantirColunasOutboxLog
+// Central` (roda toda vez que setupSheets() roda numa aba ja existente)
+// -- no-op se toda celula ja for texto.
+function _normalizarTimestampsLogCentral(sheet, headers) {
+  const colunas = ['criado_em', 'enviado_em', 'recebido_em', 'sincronizado_em', 'Retry_Manual_Em'];
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { linhasVerificadas: 0, celulasCorrigidas: 0 };
+
+  let celulasCorrigidas = 0;
+  colunas.forEach(nome => {
+    const idx = headers.indexOf(nome);
+    if (idx < 0) return;
+    const range = sheet.getRange(2, idx + 1, lastRow - 1, 1);
+    const valores = range.getValues();
+    let mudou = false;
+    for (let i = 0; i < valores.length; i++) {
+      if (valores[i][0] instanceof Date) {
+        // .toISOString() preserva o MESMO instante (UTC) -- so troca a
+        // representacao, nunca desloca a hora real gravada.
+        valores[i][0] = valores[i][0].toISOString();
+        mudou = true;
+        celulasCorrigidas++;
+      }
+    }
+    if (mudou) range.setValues(valores);
+  });
+  return { linhasVerificadas: lastRow - 1, celulasCorrigidas: celulasCorrigidas };
 }
 
 // classificarErroLogCentral: heurística best-effort pra encaixar uma
