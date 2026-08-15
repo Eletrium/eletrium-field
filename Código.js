@@ -160,10 +160,12 @@ function setupSheets() {
   // append-only, registro minimo por codigo de patrimonio digitado (sem
   // validacao contra catalogo/calibracao/obrigatoriedade -- dependem de
   // sync SharePoint->Sheets que nao existe, fora deste contrato).
-  if (!ss.getSheetByName('Ferramental_Movimentos')) {
-    const ferramental = ss.insertSheet('Ferramental_Movimentos');
-    ferramental.getRange(1, 1, 1, FERRAMENTAL_MOVIMENTOS_HEADERS.length).setValues([FERRAMENTAL_MOVIMENTOS_HEADERS]);
+  let ferramentalSheet = ss.getSheetByName('Ferramental_Movimentos');
+  if (!ferramentalSheet) {
+    ferramentalSheet = ss.insertSheet('Ferramental_Movimentos');
+    ferramentalSheet.getRange(1, 1, 1, FERRAMENTAL_MOVIMENTOS_HEADERS.length).setValues([FERRAMENTAL_MOVIMENTOS_HEADERS]);
   }
+  _garantirFormatoFerramentalMovimentos(ferramentalSheet);
 
   addMissingHeaders();
   garantirLogCentral(ss);
@@ -179,6 +181,35 @@ const FERRAMENTAL_MOVIMENTOS_HEADERS = [
   'Movimento_ID', 'OS_ID', 'Tecnico_ID', 'Patrimonio_Codigo', 'Tipo_Movimento',
   'Estado_OK', 'Observacao', 'Registrado_Em', 'operation_id'
 ];
+
+// _garantirFormatoFerramentalMovimentos -- achado adjacente da varredura
+// de TOCTOU (15/08, finalizado agora): Registrado_Em gravava Date nativo
+// ate o commit 5b7f83c (corrigido pra .toISOString()) -- mesma classe de
+// bug ja tratada em Log_Central/Ordens_Servico/Alocacoes_Ofertas, mesmo
+// padrao de correcao aplicado aqui: (1) coluna pre-formatada como texto
+// '@' ANTES de qualquer escrita nova (evita o Sheets autoconverter ISO
+// 8601 em Date com timezone silencioso -- protege dai em diante); (2)
+// normalizacao de celulas Date ja gravadas ANTES do fix de 5b7f83c, se
+// a aba ja existia (mesmo mecanismo de _normalizarTimestampsLogCentral,
+// idempotente, no-op se ja for tudo texto). Roda sempre (aba nova ou ja
+// existente), mesmo padrao "sempre reaplica" de garantirLogCentral.
+function _garantirFormatoFerramentalMovimentos(sheet) {
+  const idxRegistradoEm = FERRAMENTAL_MOVIMENTOS_HEADERS.indexOf('Registrado_Em');
+  sheet.getRange(1, idxRegistradoEm + 1, LOG_CENTRAL_LINHAS_VALIDACAO, 1).setNumberFormat('@');
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const range = sheet.getRange(2, idxRegistradoEm + 1, lastRow - 1, 1);
+  const valores = range.getValues();
+  let mudou = false;
+  for (let i = 0; i < valores.length; i++) {
+    if (valores[i][0] instanceof Date) {
+      valores[i][0] = valores[i][0].toISOString();
+      mudou = true;
+    }
+  }
+  if (mudou) range.setValues(valores);
+}
 
 // ─── hashPin / gerarSalt — Frente E (Diretriz v1.1): PIN nunca em texto
 // puro na planilha. Salt aleatorio por tecnico (Utilities.getUuid()),
