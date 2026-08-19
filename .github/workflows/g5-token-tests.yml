@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - chatgpt/g5-hmac-onda2-20260815
+  pull_request:
+    branches:
+      - active-os-backend-v2.1-20260815
   workflow_dispatch:
 
 permissions:
