@@ -74,9 +74,13 @@ function executarAcao(action, p) {
     // dispositivoId em todo case abaixo que ganhou o tratamento;
     // opcionais, chamador antigo sem eles continua funcionando.
     case 'pausarOS':
-      return pausarOS(p[0], p[1], p[2], p[3], p[4], p[5], p[6]);
+      // p[7]=token (Onda 2, Opcao A) -- opcional durante a transicao.
+      // Wrapper valida sessao + posse antes de delegar ao pausarOS legado.
+      return pausarOSComSessao(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
     case 'retomarOS':
-      return retomarOS(p[0], p[1], p[2], p[3], p[4]);
+      // p[5]=token (Onda 2, Opcao A) -- opcional durante a transicao.
+      // Wrapper valida sessao + posse antes de delegar ao retomarOS legado.
+      return retomarOSComSessao(p[0], p[1], p[2], p[3], p[4], p[5]);
     case 'encerrarOS':
       // p[4]=token (Onda 1, Opcao A) -- opcional.
       return encerrarOS(p[0], p[1], p[2], p[3], p[4]);
