@@ -1,0 +1,31 @@
+name: G5 Token Session Tests
+
+on:
+  push:
+    branches:
+      - chatgpt/g5-hmac-onda2-20260815
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  g5-token-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Show runtime
+        run: |
+          node --version
+          git rev-parse HEAD
+
+      - name: Run portable G5 suite
+        run: node tests/g5-token-sessao/run-all-portable.js
