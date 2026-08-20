@@ -1438,7 +1438,14 @@ function getClientes() {
 }
 
 // ─── getOsDoTecnico ──────────────────────────────────────────────
-function getOsDoTecnico(tecnicoId) {
+function getOsDoTecnico(tecnicoId, token) {
+  // Onda 3 do rollout da sessao HMAC (Opcao A): token opcional durante
+  // a transicao. Se presente, prova identidade antes de qualquer leitura/escrita
+  // especifica do tecnico. Nao ha conceito de posse de OS nestas funcoes.
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(null, identidade.erro);
+  }
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Ordens_Servico');
   if (!sheet) return [];
@@ -1515,7 +1522,14 @@ function getOsDoTecnico(tecnicoId) {
 
 // ─── getDiariaTecnico ────────────────────────────────────────────
 // Retorna resumo do dia incluindo campos KM/Veiculo (para Resumo)
-function getDiariaTecnico(tecnicoId) {
+function getDiariaTecnico(tecnicoId, token) {
+  // Onda 3 do rollout da sessao HMAC (Opcao A): token opcional durante
+  // a transicao. Se presente, prova identidade antes de qualquer leitura/escrita
+  // especifica do tecnico. Nao ha conceito de posse de OS nestas funcoes.
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(null, identidade.erro);
+  }
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Diaria_Tecnico');
   if (!sheet) return null;
@@ -1591,7 +1605,13 @@ function getDiariaHoje(tecnicoId) {
 // operationId/dispositivoId no final (Frente D) — backward-compat
 // posicional, chamador antigo sem eles continua funcionando sem
 // idempotencia.
-function registrarInicioDia(tecnicoId, tecnicoNome, usaVeiculo, kmInicial, veiculoId, operationId, dispositivoId) {
+function registrarInicioDia(tecnicoId, tecnicoNome, usaVeiculo, kmInicial, veiculoId, operationId, dispositivoId, token) {
+  // Onda 3 do rollout da sessao HMAC (Opcao A): token opcional durante
+  // a transicao. Identidade e validada antes de qualquer mutacao do tecnico.
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+  }
   return executarIdempotente(operationId, 'APONTAMENTO', '', tecnicoId, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Diaria_Tecnico');
@@ -1618,7 +1638,13 @@ function registrarInicioDia(tecnicoId, tecnicoNome, usaVeiculo, kmInicial, veicu
 
 // ─── registrarFimDia ─────────────────────────────────────────────
 // Chamado no Resumo quando o tecnico informa o KM final
-function registrarFimDia(tecnicoId, kmFinal, operationId, dispositivoId) {
+function registrarFimDia(tecnicoId, kmFinal, operationId, dispositivoId, token) {
+  // Onda 3 do rollout da sessao HMAC (Opcao A): token opcional durante
+  // a transicao. Identidade e validada antes de qualquer mutacao do tecnico.
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+  }
   return executarIdempotente(operationId, 'APONTAMENTO', '', tecnicoId, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Diaria_Tecnico');
@@ -3044,7 +3070,14 @@ function getColVeiculo(campo) {
 
 // ─── getVeiculoDoTecnico ─────────────────────────────────────────
 // Retorna o veiculo cadastrado pelo tecnico, ou null se nao houver.
-function getVeiculoDoTecnico(tecnicoId) {
+function getVeiculoDoTecnico(tecnicoId, token) {
+  // Onda 3 do rollout da sessao HMAC (Opcao A): token opcional durante
+  // a transicao. Se presente, prova identidade antes de qualquer leitura/escrita
+  // especifica do tecnico. Nao ha conceito de posse de OS nestas funcoes.
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(null, identidade.erro);
+  }
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Veiculos_Tecnicos');
   if (!sheet) return null;
@@ -3074,7 +3107,14 @@ function getVeiculoDoTecnico(tecnicoId) {
 // Novo cadastro: Status_Aprovacao = 'Pendente'.
 // Edicao: atualiza dados e marca Alteracao_Pendente = true,
 //   mas NAO desativa o cadastro aprovado anterior.
-function cadastrarOuEditarVeiculo(tecnicoId, tecnicoNome, tipoVeiculo, placa, modelo) {
+function cadastrarOuEditarVeiculo(tecnicoId, tecnicoNome, tipoVeiculo, placa, modelo, token) {
+  // Onda 3 do rollout da sessao HMAC (Opcao A): token opcional durante
+  // a transicao. Se presente, prova identidade antes de qualquer leitura/escrita
+  // especifica do tecnico. Nao ha conceito de posse de OS nestas funcoes.
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(null, identidade.erro);
+  }
   const ss = SpreadsheetApp.openById(SHEET_ID);
   let veiculosSheet = ss.getSheetByName('Veiculos_Tecnicos');
 

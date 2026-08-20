@@ -66,7 +66,8 @@ function executarAcao(action, p) {
     case 'getDiariaHoje':
       return getDiariaHoje(p[0]);
     case 'getOsDoTecnico':
-      return getOsDoTecnico(p[0]);
+      // p[1]=token (Onda 3, Opcao A) -- opcional durante a transicao.
+      return getOsDoTecnico(p[0], p[1]);
     case 'iniciarOSComGeo':
       // p[8]=token (Onda 1, Opcao A) -- opcional.
       return iniciarOSComGeo(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]);
@@ -95,15 +96,20 @@ function executarAcao(action, p) {
       // p[11]=token (Onda 1, Opcao A) -- opcional.
       return salvarResposta(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11]);
     case 'getVeiculoDoTecnico':
-      return getVeiculoDoTecnico(p[0]);
+      // p[1]=token (Onda 3, Opcao A) -- opcional durante a transicao.
+      return getVeiculoDoTecnico(p[0], p[1]);
     case 'cadastrarOuEditarVeiculo':
-      return cadastrarOuEditarVeiculo(p[0], p[1], p[2], p[3], p[4]);
+      // p[5]=token (Onda 3, Opcao A) -- opcional durante a transicao.
+      return cadastrarOuEditarVeiculo(p[0], p[1], p[2], p[3], p[4], p[5]);
     case 'registrarInicioDia':
-      return registrarInicioDia(p[0], p[1], p[2], p[3], p[4], p[5], p[6]);
+      // p[7]=token (Onda 3, Opcao A) -- opcional durante a transicao.
+      return registrarInicioDia(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
     case 'registrarFimDia':
-      return registrarFimDia(p[0], p[1], p[2], p[3]);
+      // p[4]=token (Onda 3, Opcao A) -- opcional durante a transicao.
+      return registrarFimDia(p[0], p[1], p[2], p[3], p[4]);
     case 'getDiariaTecnico':
-      return getDiariaTecnico(p[0]);
+      // p[1]=token (Onda 3, Opcao A) -- opcional durante a transicao.
+      return getDiariaTecnico(p[0], p[1]);
     case 'validarPin':
       return validarPinTecnico(p[0], p[1]);
     // KM por-OS (Opção 2, 06/08) — aditivo, ver bloco correspondente em Código.js.
