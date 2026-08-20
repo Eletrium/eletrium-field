@@ -8,7 +8,7 @@
 | G2 — 1B newest-wins | Claude | 🟡 EM TESTE | Make 1B | casos A/C/D ainda exigem confirmação final conforme último handoff | quatro casos com dado real |
 | G3 — E2E-SYNC-CONFLICT | Claude | ⏸️ AGUARDANDO G2 | 1A + 1B | G2 | `ROTEIRO-E2E-SYNC-CONFLICT.md` |
 | G4 — Retry automático | Claude + ação operacional | 🟡 NÃO FECHADO | scanner Make 5952040 | confirmação real do Run once / resultado | execução real + teto/retry |
-| G5 — Sessão HMAC / E-TOCTOU-01 | ChatGPT | 🟡 EM EXECUÇÃO | linha ativa + rollout HMAC | Onda 2 integrada; faltam escopo exato Onda 3 + flip obrigatório posterior | PR #1 mergeado; CI limpo; red-team bloqueante corrigido |
+| G5 — Sessão HMAC / E-TOCTOU-01 | ChatGPT | 🟡 EM EXECUÇÃO | linha ativa + `chatgpt/g5-hmac-onda3-20260820` | Onda 3 CI verde; falta red-team + decisão sobre `getDiariaHoje`/`registrarUsoVeiculo` + migração Field + flip obrigatório posterior | PR #3 draft; 37/37 Onda 3; 31 arquivos PASS |
 | G6 — Homologação candidata | ChatGPT; Claude co-review | 🟡 PREPARAÇÃO | `chatgpt/g6-candidate-prep-20260819` | convergência G2-G5 + dados de versões Make/SP + criação do deployment candidato | `G6-CANDIDATE-MANIFEST.md` |
 | G7 — Deploy | coordenado | ⏹️ NÃO INICIADO | — | G2-G6 | plano + rollback |
 | G8 — Produção assistida | coordenado | ⏹️ NÃO INICIADO | — | G7 | OS real controlada ponta a ponta |
@@ -51,3 +51,17 @@
 - merge squash na linha ativa: `31618e1a11f025633e9fe09b5d0c42977b522ed7`
 - Achados 1/3/4/5 permanecem registrados como não bloqueantes no README da suíte
 - token ainda opcional por desenho de transição; flip obrigatório é gate posterior
+
+## Evidência G5 — Onda 3
+
+- PR #3: `chatgpt/g5-hmac-onda3-20260820` → `active-os-backend-v2.1-20260815`
+- HEAD em teste: `5bea6e66abd61d6b3c301b46de157ed302f74782`
+- funções ativas migradas: `registrarInicioDia`, `registrarFimDia`, `cadastrarOuEditarVeiculo`, `getDiariaTecnico`, `getVeiculoDoTecnico`, `getOsDoTecnico`
+- validação fica dentro da própria função, não apenas no dispatcher
+- `registrarUsoVeiculo`: não migrada; backend órfão sem case/call-site real confirmado, pendente de reconciliação antes do enforcement
+- `getDiariaHoje`: fora da lista fonte da Onda 3; enviado ao red-team para classificar exclusão intencional vs. omissão
+- CI: SUCCESS, workflow run `32425241220`
+- testes específicos Onda 3: 37 PASS / 0 FAIL
+- runner portátil: 31 arquivos PASS / 0 FAIL
+- token continua opcional; frontend versionado ainda não encaminha sessão nestes calls
+- PR permanece draft até red-team e zero achado bloqueante aberto
