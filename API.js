@@ -64,7 +64,8 @@ function executarAcao(action, p) {
     case 'getTecnicos':
       return getTecnicos();
     case 'getDiariaHoje':
-      return getDiariaHoje(p[0]);
+      // p[1]=token (Onda 3, red-team PR #3) -- opcional durante a transicao.
+      return getDiariaHoje(p[0], p[1]);
     case 'getOsDoTecnico':
       // p[1]=token (Onda 3, Opcao A) -- opcional durante a transicao.
       return getOsDoTecnico(p[0], p[1]);

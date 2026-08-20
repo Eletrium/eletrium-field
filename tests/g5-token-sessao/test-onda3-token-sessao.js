@@ -62,7 +62,10 @@ function reachesDownstream(fn) {
 }
 
 function isRejected(result) {
-  return result && result.success === false && result.sucesso === false;
+  // Contrato CANONICO do backend: success:false. Nao depende do alias
+  // legado em portugues (sucesso), evitando falso negativo/positivo se
+  // esse alias for removido no futuro.
+  return result && result.success === false;
 }
 
 function runGuardMatrix(label, invoke) {
@@ -70,22 +73,28 @@ function runGuardMatrix(label, invoke) {
   const s = makeSandbox(now);
   const tokenOk = s.emitirTokenSessao('TEC-1').token;
   const tokenOutro = s.emitirTokenSessao('TEC-2').token;
-  const tokenForjado = tokenOk.slice(0, -2) + (tokenOk.endsWith('00') ? '11' : '00');
+  const tokenAssinaturaRuim = tokenOk.slice(0, -2) + (tokenOk.endsWith('00') ? '11' : '00');
+  const tokenMalformado = 'token.sem-assinatura';
+  const tokenPayloadCorrompido = tokenOk.replace(/^TEC-1\./, 'TEC-9.');
 
-  check(label + ' 1/5 sem token preserva transicao', reachesDownstream(() => invoke(s, undefined)));
-  check(label + ' 2/5 token valido aceita identidade', reachesDownstream(() => invoke(s, tokenOk)));
-  check(label + ' 3/5 assinatura errada recusa antes do downstream', isRejected(invoke(s, tokenForjado)));
-  check(label + ' 4/5 token de X alegando Y recusa', isRejected(invoke(s, tokenOutro)));
+  check(label + ' 1/8 sem token preserva transicao', reachesDownstream(() => invoke(s, undefined)));
+  check(label + ' 2/8 token valido aceita identidade', reachesDownstream(() => invoke(s, tokenOk)));
+  check(label + ' 3/8 assinatura errada recusa antes do downstream', isRejected(invoke(s, tokenAssinaturaRuim)));
+  check(label + ' 4/8 token vazio recusa antes do downstream', isRejected(invoke(s, '')));
+  check(label + ' 5/8 token malformado recusa antes do downstream', isRejected(invoke(s, tokenMalformado)));
+  check(label + ' 6/8 payload corrompido recusa antes do downstream', isRejected(invoke(s, tokenPayloadCorrompido)));
+  check(label + ' 7/8 token de X alegando Y recusa', isRejected(invoke(s, tokenOutro)));
 
   const old = makeSandbox(now - 25 * 60 * 60 * 1000);
   const expirado = old.emitirTokenSessao('TEC-1').token;
-  check(label + ' 5/5 token expirado recusa', isRejected(invoke(s, expirado)));
+  check(label + ' 8/8 token expirado recusa', isRejected(invoke(s, expirado)));
 }
 
 runGuardMatrix('registrarInicioDia', (s, token) => s.registrarInicioDia('TEC-1', 'Nome', false, '', '', undefined, undefined, token));
 runGuardMatrix('registrarFimDia', (s, token) => s.registrarFimDia('TEC-1', '', undefined, undefined, token));
 runGuardMatrix('cadastrarOuEditarVeiculo', (s, token) => s.cadastrarOuEditarVeiculo('TEC-1', 'Nome', 'Carro', 'ABC1D23', 'Modelo', token));
 runGuardMatrix('getDiariaTecnico', (s, token) => s.getDiariaTecnico('TEC-1', token));
+runGuardMatrix('getDiariaHoje', (s, token) => s.getDiariaHoje('TEC-1', token));
 runGuardMatrix('getVeiculoDoTecnico', (s, token) => s.getVeiculoDoTecnico('TEC-1', token));
 runGuardMatrix('getOsDoTecnico', (s, token) => s.getOsDoTecnico('TEC-1', token));
 
@@ -99,6 +108,7 @@ runGuardMatrix('getOsDoTecnico', (s, token) => s.getOsDoTecnico('TEC-1', token))
   s.registrarInicioDia = (...a) => { seen.inicio = a; return {}; };
   s.registrarFimDia = (...a) => { seen.fim = a; return {}; };
   s.getDiariaTecnico = (...a) => { seen.diaria = a; return {}; };
+  s.getDiariaHoje = (...a) => { seen.diariaHoje = a; return {}; };
 
   s.executarAcao('getOsDoTecnico', ['TEC-1', 'TOK-OS']);
   s.executarAcao('getVeiculoDoTecnico', ['TEC-1', 'TOK-VEI']);
@@ -106,6 +116,7 @@ runGuardMatrix('getOsDoTecnico', (s, token) => s.getOsDoTecnico('TEC-1', token))
   s.executarAcao('registrarInicioDia', ['TEC-1','Nome',true,100,'VEI-1','OP-1','DEV-1','TOK-INI']);
   s.executarAcao('registrarFimDia', ['TEC-1',120,'OP-2','DEV-1','TOK-FIM']);
   s.executarAcao('getDiariaTecnico', ['TEC-1','TOK-DIA']);
+  s.executarAcao('getDiariaHoje', ['TEC-1','TOK-HOJE']);
 
   check('dispatcher getOsDoTecnico p[1]=token', seen.os && seen.os[1] === 'TOK-OS');
   check('dispatcher getVeiculoDoTecnico p[1]=token', seen.veiculo && seen.veiculo[1] === 'TOK-VEI');
@@ -113,9 +124,12 @@ runGuardMatrix('getOsDoTecnico', (s, token) => s.getOsDoTecnico('TEC-1', token))
   check('dispatcher registrarInicioDia p[7]=token', seen.inicio && seen.inicio[7] === 'TOK-INI');
   check('dispatcher registrarFimDia p[4]=token', seen.fim && seen.fim[4] === 'TOK-FIM');
   check('dispatcher getDiariaTecnico p[1]=token', seen.diaria && seen.diaria[1] === 'TOK-DIA');
+  check('dispatcher getDiariaHoje p[1]=token', seen.diariaHoje && seen.diariaHoje[1] === 'TOK-HOJE');
 }
 
-// registrarUsoVeiculo: backend existe, mas sem case/call-site real hoje. Nao migrar por reflexo.
+// registrarUsoVeiculo: confirma as DUAS metades da classificacao "orfao":
+// a funcao existe de verdade no backend, mas nao esta exposta no dispatcher.
+check('escopo: registrarUsoVeiculo existe no backend', /function\s+registrarUsoVeiculo\s*\(/.test(CODIGO));
 check('escopo: registrarUsoVeiculo continua fora do dispatcher nesta onda', !/case\s+["']registrarUsoVeiculo["']/.test(API));
 
 console.log(`\nOnda 3: ${pass} PASS / ${fail} FAIL`);

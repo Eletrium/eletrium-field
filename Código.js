@@ -1573,7 +1573,16 @@ function getDiariaTecnico(tecnicoId, token) {
 // Verifica se o tecnico ja iniciou o dia.
 // { existe: false } -> mostrar Scr_Inicio_Dia
 // { existe: true, ... } -> ir direto p/ Home
-function getDiariaHoje(tecnicoId) {
+function getDiariaHoje(tecnicoId, token) {
+  // Onda 3 / red-team PR #3: esta leitura e especifica do tecnico e
+  // acessa a mesma Diaria_Tecnico protegida por getDiariaTecnico. Sem
+  // identidade, tecnicoId era um IDOR: bastava alegar outro ID. Token
+  // continua opcional durante a transicao; quando presente, identidade
+  // e validada ANTES de qualquer leitura da diaria.
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusa(null, identidade.erro);
+  }
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Diaria_Tecnico');
   if (!sheet) return { existe: false };
