@@ -1,0 +1,50 @@
+name: Apply G5 Onda 3 Once
+
+on:
+  push:
+    branches:
+      - chatgpt/g5-hmac-onda3-20260820
+    paths:
+      - scripts/apply-g5-onda3.js
+      - .github/workflows/apply-g5-onda3-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-onda3:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Apply exact Onda 3 patch
+        run: node scripts/apply-g5-onda3.js
+
+      - name: Diff sanity
+        run: |
+          git diff --check
+          git diff -- Código.js API.js
+
+      - name: Run portable G5 suite
+        run: node tests/g5-token-sessao/run-all-portable.js
+
+      - name: Remove one-shot helper
+        run: rm scripts/apply-g5-onda3.js .github/workflows/apply-g5-onda3-once.yml
+
+      - name: Commit generated patch
+        run: |
+          git config user.name "Eletrium Automation"
+          git config user.email "contato@eletrium.com.br"
+          git add -- Código.js API.js
+          git add -u -- scripts/apply-g5-onda3.js .github/workflows/apply-g5-onda3-once.yml
+          git commit -m "feat(g5): implementar onda 3 de sessao HMAC"
+          git push origin HEAD:chatgpt/g5-hmac-onda3-20260820
