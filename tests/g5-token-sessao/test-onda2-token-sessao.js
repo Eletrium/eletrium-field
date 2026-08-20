@@ -22,7 +22,8 @@ const sandbox = {
     return { ok: false, erro: 'Token de sessao invalido' };
   },
   verificarPosseOS(osId, tecnicoId) {
-    return tecnicoId === 'TEC-1'
+    const dono = tecnicoId === 'TEC-1' && osId !== 'OS-SEM-POSSE';
+    return dono
       ? { ok: true }
       : { ok: false, erro: 'Tecnico ' + tecnicoId + ' nao tem posse da OS ' + osId };
   },
@@ -47,10 +48,18 @@ let r = sandbox.pausarOSComSessao('OS-1', 'TEC-1', 'Nome', 'Almoco', '', 'OP-1',
 check('1a: pausar sem token delega durante transicao', r.sucesso === true && r.delegated === 'pausarOS');
 check('1b: pausar sem token ainda validou/delegou com argumentos legados intactos', calls.length === 1 && calls[0].args[5] === 'OP-1' && calls[0].args[6] === 'DEV-1');
 
-// 2) Token valido do mesmo tecnico passa.
+// 2) Token valido do mesmo tecnico passa quando a posse tambem e valida.
 calls.length = 0;
 r = sandbox.pausarOSComSessao('OS-1', 'TEC-1', 'Nome', 'Almoco', '', 'OP-2', 'DEV-1', 'VALID:TEC-1');
-check('2: pausar com token valido delega', r.sucesso === true && calls.length === 1);
+check('2: pausar com token valido e posse valida delega', r.sucesso === true && calls.length === 1);
+
+// 2b) Red-team: token valido NAO substitui posse. Esta combinacao precisa
+// bloquear tecnico autenticado tentando operar uma OS que nao possui.
+// O teste deve falhar se surgir qualquer early-return apos validar o token
+// que pule verificarPosseOS.
+calls.length = 0;
+r = sandbox.pausarOSComSessao('OS-SEM-POSSE', 'TEC-1', 'Nome', 'Almoco', '', 'OP-2B', 'DEV-1', 'VALID:TEC-1');
+check('2b: token valido do proprio tecnico + posse negada bloqueia sem delegar', r.success === false && /nao tem posse/i.test(r.erro) && calls.length === 0, JSON.stringify(r));
 
 // 3) Token invalido bloqueia ANTES da mutacao.
 calls.length = 0;
