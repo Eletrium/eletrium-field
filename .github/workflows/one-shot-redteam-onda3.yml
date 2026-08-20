@@ -1,0 +1,35 @@
+name: One-shot Red-team Onda 3
+
+on:
+  push:
+    branches:
+      - chatgpt/g5-hmac-onda3-20260820
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/g5-hmac-onda3-20260820
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply exact red-team patch
+        run: node tests/g5-token-sessao/apply-redteam-onda3.js
+      - name: Run portable G5 suite
+        run: node tests/g5-token-sessao/run-all-portable.js
+      - name: Commit final product diff only
+        shell: bash
+        run: |
+          git config user.name "Eletrium Automation"
+          git config user.email "contato@eletrium.com.br"
+          git rm .github/workflows/one-shot-redteam-onda3.yml tests/g5-token-sessao/apply-redteam-onda3.js
+          git add -- Código.js API.js tests/g5-token-sessao/test-onda3-token-sessao.js
+          git commit -m "fix(g5): fechar red-team da Onda 3"
+          git push origin HEAD:chatgpt/g5-hmac-onda3-20260820
