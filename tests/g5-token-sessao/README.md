@@ -19,10 +19,11 @@ O runner executa cada `test-*.js` em processo Node isolado e carrega `portable-f
 
 ## Onda 2
 
-`test-onda2-token-sessao.js` adiciona 11 verificações para:
+`test-onda2-token-sessao.js` adiciona 12 verificações para:
 
 - compatibilidade transicional sem token;
-- token válido;
+- token válido com posse válida;
+- **token válido do próprio técnico com posse negada** (achado bloqueante do red-team Cowork 2);
 - token inválido;
 - token expirado;
 - token de outro técnico;
@@ -30,7 +31,16 @@ O runner executa cada `test-*.js` em processo Node isolado e carrega `portable-f
 - preservação dos parâmetros legados;
 - roteamento correto do token no dispatcher para `pausarOS` e `retomarOS`.
 
+A combinação `token válido + posse negada` é obrigatória porque impede que uma regressão com early-return após a autenticação pule `verificarPosseOS`. O teste deve bloquear um técnico autenticado tentando operar uma OS que não possui e deve provar que a função legada não foi delegada.
+
 O total histórico de 684 não deve ser reescrito como novo PASS automaticamente. Após a Onda 2, o baseline só pode ser atualizado depois de uma execução real do runner no checkout candidato.
+
+## Achados de red-team não bloqueantes da Onda 2
+
+- O harness de Onda 2 usa mocks para isolar sessão/posse; a regressão completa continua sendo executada pelo runner versionado e o E2E real pertence à homologação integrada.
+- Padronização final do envelope canônico de recusa permanece fora deste patch mínimo enquanto não houver quebra funcional observada neste PR.
+- A Onda 2 cobre apenas os endpoints definidos para esta fatia; os demais pontos sensíveis a posse seguem para as ondas previstas no rollout.
+- O tratamento de `operationId` vazio deve ser revisto junto da padronização contratual, sem ampliar este PR de autenticação.
 
 ## Regra de aceite
 
