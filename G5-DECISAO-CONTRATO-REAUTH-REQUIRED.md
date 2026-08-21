@@ -1,6 +1,6 @@
 # G5 — Decisão de Contrato REAUTH_REQUIRED
 
-Status: **DECISÃO DO OWNER — PRÉ-ENFORCEMENT**
+Status: **DECISÃO DO OWNER FECHADA — PRÉ-ENFORCEMENT**
 
 Esta decisão não implementa runtime, não autoriza enforcement de token e não cria G6.
 
@@ -102,6 +102,17 @@ Offline: captura de campo e enfileiramento podem continuar sem rede; a validade 
 
 A interpretação de `reauth_required` deve ficar na camada comum de chamadas/transporte do Field, não copiada manualmente em cada tela. As telas podem decidir como preservar contexto, mas a detecção da sessão expirada deve ser única.
 
+## Eixo 4 — Reaproveitamento de mecanismos existentes
+
+**DECISÃO: reaproveitar os mecanismos maduros já existentes; o Eixo 4 reforça, sem alterar, as decisões dos Eixos 1–3.**
+
+1. **Precedente conceitual:** o split `SYNC_ERROR` (transitório) × `DIVERGENT` (permanente) do `Log_Central` já estabelece que categorias diferentes de falha exigem tratamentos automáticos distintos. `reauth_required` × `retryable` aplica o mesmo princípio em outro domínio — identidade, não sincronização de dados.
+2. **Outbox / Frente D:** para escritas, reutilizar a fila e a disciplina já maduras. O item não congela token; o token vigente é injetado no envio. Expiração de sessão bloqueia o transporte sem descartar payload nem trocar `operationId`.
+3. **`_recusa()` extensível:** a função já aceita `extras`, portanto `reauth_required` pode ser adicionado sem refatorar sua assinatura. O helper `_recusaSessao()` aprovado no Eixo 1 centraliza essa extensão para recusas de sessão.
+4. **Catálogo `error_code`:** não será usado como mecanismo primário de reautenticação. Se no futuro surgir necessidade real de novo `error_code` relacionado a identidade, deverá seguir o mesmo processo formal de aprovação já aplicado ao catálogo existente, nunca ser criado ad hoc.
+
+**Conclusão do Eixo 4:** nenhum novo mecanismo de fila, status de sincronização ou refatoração de `_recusa()` é necessário para implementar REAUTH_REQUIRED. Este eixo está fechado e não é mais bloqueio documental para G6.
+
 ## Enforcement e versão do contrato
 
 Durante migração:
@@ -137,7 +148,3 @@ Tornar um parâmetro antes opcional em obrigatório é mudança quebradora e dev
 12. fila offline não congela token antigo dentro do item;
 13. enforcement sem token => falha clara;
 14. skew Field v1 x backend v2 => boot bloqueado pelo contrato.
-
-## Eixo 4
-
-O conteúdo literal do Eixo 4 da proposta da Cowork 2 não ficou disponível nos anexos/índice desta conversa. **Nenhuma decisão foi inventada para esse eixo.** Incorporar o texto literal quando estiver disponível e decidir antes da implementação final do contrato.
