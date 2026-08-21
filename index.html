@@ -111,8 +111,19 @@ input[type=range]{width:100%;height:44px;accent-color:var(--green);cursor:pointe
 .badge-aprovado{background:rgba(34,181,115,.15);color:var(--green);border:1px solid rgba(34,181,115,.3)}
 .badge-pendente{background:rgba(243,156,18,.15);color:var(--yellow);border:1px solid rgba(243,156,18,.3)}
 .badge-rejeitado{background:rgba(231,76,60,.15);color:var(--red);border:1px solid rgba(231,76,60,.3)}
-#offline-banner{display:none;background:var(--yellow);color:#000;text-align:center;font-size:12px;font-weight:700;padding:6px;position:sticky;top:0;z-index:200}
+#banners-topo{position:sticky;top:0;z-index:200;display:flex;flex-direction:column}
+#offline-banner{display:none;background:var(--yellow);color:#000;text-align:center;font-size:12px;font-weight:700;padding:6px}
 #offline-banner.show{display:block}
+/* UX (21/08, achado 4 do red-team da Frente F -- decisao do Geovane):
+   aviso PERSISTENTE (nao um toast que some sozinho) enquanto houver
+   operacao(oes) na fila local do outbox ainda nao confirmadas como
+   enviadas pelo servidor -- se o tecnico desinstalar o app ou trocar
+   de aparelho antes disso, a operacao se perde silenciosamente (nunca
+   sai do IndexedDB, ninguem sabe que existiu). Vermelho (nao amarelo
+   como o offline-banner) -- risco de PERDA de dado, mais grave que só
+   "sem sinal agora". */
+#pendente-envio-banner{display:none;background:var(--red);color:#fff;text-align:center;font-size:12px;font-weight:700;padding:6px}
+#pendente-envio-banner.show{display:block}
 #build-id{position:fixed;bottom:2px;right:6px;font-size:9px;color:var(--gray);opacity:.5;z-index:50;pointer-events:none;font-family:monospace;white-space:nowrap}
 #scr-bloqueio-contrato{display:none;position:fixed;inset:0;background:var(--bg);z-index:1001;align-items:center;justify-content:center;flex-direction:column;padding:24px}
 #scr-bloqueio-contrato.show{display:flex}
@@ -120,7 +131,10 @@ input[type=range]{width:100%;height:44px;accent-color:var(--green);cursor:pointe
 </head>
 <body>
 
-<div id="offline-banner">SEM CONEXÃO — dados serão enviados quando o sinal voltar</div>
+<div id="banners-topo">
+  <div id="offline-banner">SEM CONEXÃO — dados serão enviados quando o sinal voltar</div>
+  <div id="pendente-envio-banner"></div>
+</div>
 <div id="loading"><div class="spinner"></div><div class="loading-msg" id="loading-msg">Aguarde...</div></div>
 <div id="toast"></div>
 <div id="build-id"></div>
@@ -1099,6 +1113,7 @@ async function processarFilaOffline() {
       // sem break — continua pros próximos itens da fila.
     }
   }
+  atualizarBannerPendenteEnvio();
 }
 
 // ================================================================
@@ -1135,6 +1150,7 @@ async function reconciliarIntencoesOrfas() {
       await atualizarItemFila(item.id, { status: 'QUEUED', proximaTentativaEm: 0 });
     }
   }
+  atualizarBannerPendenteEnvio();
 }
 
 // Achado ADJACENTE de D7-08: capturarEUpload tem o mesmo buraco (o
@@ -1163,6 +1179,7 @@ async function reconciliarUploadsOrfaos() {
       toast('Nao foi possivel confirmar um envio anterior (' + campo + ') -- verifique e reenvie se necessario.', true);
     }
   }
+  atualizarBannerPendenteEnvio();
 }
 
 // ================================================================
@@ -1205,6 +1222,26 @@ function renderStatusSincronizacao(elId) {
       '<div style="font-size:11px;color:var(--gray);margin-top:2px">Seus dados permanecem salvos neste aparelho</div>' +
       '<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="tentarNovamenteDivergentes()">TENTAR NOVAMENTE</button>';
   });
+}
+
+// UX (21/08, achado 4 do red-team da Frente F -- decisao do Geovane):
+// aviso PERSISTENTE, visível em QUALQUER tela (elemento global, fora do
+// sistema de .screen -- mesmo padrão do #offline-banner), enquanto
+// houver operação(ões) na fila local ainda não confirmadas como
+// enviadas. Diferente de renderStatusSincronizacao() (só a "Pendências"
+// da Home) -- o risco de perda silenciosa existe em qualquer tela, não
+// só quando o técnico está olhando pra Home. Fica visível até a fila
+// esvaziar DE VERDADE (confirmação do servidor via processarFilaOffline/
+// reconciliação no boot) -- nunca só por causa de uma tentativa de
+// envio ter sido disparada.
+async function atualizarBannerPendenteEnvio() {
+  const el = document.getElementById('pendente-envio-banner');
+  if (!el) return;
+  const r = await resumoFila();
+  if (r.estado === 'sincronizado') { el.classList.remove('show'); return; }
+  const n = (r.n || 0) + (r.nPendentes || 0);
+  el.textContent = n + ' operaç' + (n > 1 ? 'ões' : 'ão') + ' aguardando envio — não desinstale o app nem troque de aparelho até confirmar o envio';
+  el.classList.add('show');
 }
 
 // tentarNovamenteDivergentes -- GERA operationId NOVO por item (achado
@@ -1332,18 +1369,22 @@ async function gsCallIdempotente(action, montarParams, opts) {
   const dispositivoId = obterDispositivoId();
   const params = montarParams(operationId, dispositivoId);
   await registrarIntencaoLocal(operationId, action, params, opts.tipoOperacao, opts.osId);
+  atualizarBannerPendenteEnvio(); // reflete a intenção que acabou de ser gravada, mesmo se a tentativa ao vivo abaixo ainda nem resolveu
   try {
     const resultado = await gsCallReal(action, params);
     await removerItemPorOperationId(operationId); // resolvido ao vivo -- nada pra reconciliar depois
+    atualizarBannerPendenteEnvio();
     return Object.assign({ operationId }, resultado);
   } catch (err) {
     if (opts.enfileiravelSeOffline) {
       await enfileirarChamadaComId(operationId, action, params, opts.tipoOperacao, opts.osId); // transiciona LOCAL_PENDING -> QUEUED
+      atualizarBannerPendenteEnvio();
       return { sucesso: true, offline: true, operationId };
     }
     // Sem contrato de retry offline pra esta chamada -- não há fila
     // pra reenviar depois, então não há por que manter o registro.
     await removerItemPorOperationId(operationId);
+    atualizarBannerPendenteEnvio();
     throw err;
   }
 }
@@ -1467,6 +1508,7 @@ async function capturarEUpload(inputId, statusId, campo, osIdOverride, onSucesso
   // retry automático, só reconciliação de desfecho) persistido ANTES
   // do POST; reconciliarUploadsOrfaos() confirma no próximo boot.
   await enfileirarChamadaComId(operationId, 'salvarArquivoOS', [osId, APP.tecnico.id, campo], 'UPLOAD', osId, 'LOCAL_PENDING_UPLOAD');
+  atualizarBannerPendenteEnvio();
   try {
     const base64 = await lerArquivoComoBase64(file);
     await enviarPOSTNoCors('salvarArquivoOS', [osId, APP.tecnico.id, campo, base64, file.type || 'image/jpeg', file.name || (campo + '.jpg'), operationId, dispositivoId]);
@@ -1503,6 +1545,7 @@ async function capturarEUpload(inputId, statusId, campo, osIdOverride, onSucesso
     statusEl.style.color = 'var(--red)';
   } finally {
     input.disabled = false;
+    atualizarBannerPendenteEnvio();
   }
 }
 
