@@ -30,7 +30,8 @@ O arquivo `index.html` que acompanha a linhagem de backend deve ser tratado como
 | Repo backend atual | `Eletrium/eletrium-field` | confirmado, porém contém frontend fóssil que deve ser ignorado para build Field |
 | Linha ativa backend | `active-os-backend-v2.1-20260815` | preservada |
 | Backend HMAC após Onda 3 | merge `3c2e002826d9a28f77137072cec5fa1bb323b2dd` | integrado; red-team independente do PR #4 concluído sem bloqueante |
-| PR #5 contrato pré-enforcement | `chatgpt/g5-session-contract-preenforcement-20260821` | teste somente; CI pendente antes de integrar |
+| PR #5 contrato pré-enforcement | squash merge `20c53f41e84a3af01b11964b45372999f0f22885` | **INTEGRADO; teste-only; CI verde** |
+| Backend baseline atual | `20c53f41e84a3af01b11964b45372999f0f22885` | linha ativa após PR #5 |
 | FIELD_API_CONTRACT | `v1` | preservado durante rollout transicional |
 | Field fonte funcional | `eletrium-field-checklist3` | local / ainda sem SHA remoto canônico |
 | Field branch/build/commit candidato | — | **BLOQUEADO até materialização de `eletrium-field-checklist3`** |
@@ -48,12 +49,13 @@ O arquivo `index.html` que acompanha a linhagem de backend deve ser tratado como
 - Em produção existe **uma única `_recusa` canônica**, definida em `Código.js`. `HMAC_Onda2.js` chama essa função global; a versão reduzida de 3 campos existe apenas no mock histórico do teste da Onda 2.
 - `retryable` representa repetição técnica automática. Para token expirado continuará `false`, porque repetir a mesma chamada com o mesmo token expirado geraria loop.
 - A migração do Field deve introduzir um sinal separado e explícito de **reautenticação necessária**, sem sobrecarregar `retryable`.
-- `verificarTokenSessao` real é fail-closed para token ausente, malformado, assinatura inválida, expirado e técnico divergente. PR #5 adiciona prova automatizada de robustez e consistência de envelope com código real.
+- `verificarTokenSessao` real é fail-closed para token ausente, malformado, assinatura inválida, expirado e técnico divergente.
+- PR #5 cristalizou essa decisão em teste com código real: 18 PASS / 0 FAIL; suíte completa 32 arquivos PASS / 0 FAIL; workflow `32521567331` SUCCESS.
 
 ## Pré-condições para autorizar criação de G6
 
 1. Red-team independente executado especificamente contra o PR #4 / árvore mergeada correspondente — **CONCLUÍDO, sem bloqueante do PR**.
-2. PR #5 / contrato pré-enforcement com CI verde e integrado, ou decisão explícita equivalente registrada.
+2. PR #5 / contrato pré-enforcement — **CONCLUÍDO E INTEGRADO** em `20c53f41e84a3af01b11964b45372999f0f22885`.
 3. `eletrium-field-checklist3` materializado em branch remota dedicada, com SHA estável e sem perda das funcionalidades P0/UX atuais.
 4. Migração G5 frontend concluída nessa mesma linhagem funcional: token emitido no login, armazenado e encaminhado nos call-sites definidos.
 5. Sinal separado de reautenticação implementado no Field/contrato antes do enforcement obrigatório; não reutilizar `retryable` para refresh/login.
