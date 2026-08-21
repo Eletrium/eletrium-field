@@ -6,19 +6,24 @@ on:
       - chatgpt/g5-reauth-backend-20260821
     paths:
       - '.github/workflows/g5-reauth-apply.yml'
+  pull_request:
+    branches:
+      - active-os-backend-v2.1-20260815
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 jobs:
   apply-reauth:
+    if: github.event_name == 'push' || github.head_ref == 'chatgpt/g5-reauth-backend-20260821'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout branch
+      - name: Checkout head branch
         uses: actions/checkout@v4
         with:
-          ref: chatgpt/g5-reauth-backend-20260821
+          ref: chatgpt/g5-reauth-backend-v2.1-20260821
           fetch-depth: 0
 
       - name: Setup Node
@@ -51,6 +56,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add -- Código.js HMAC_Onda2.js API.js Checklist.js tests/g5-token-sessao/test-reauth-required-backend.js HMAC_Reauth.js tools/apply-g5-reauth.js .github/workflows/g5-reauth-apply.yml
+          git status --short
           git commit -m "feat(g5): implementar contrato REAUTH_REQUIRED backend"
           git push origin HEAD:chatgpt/g5-reauth-backend-20260821
