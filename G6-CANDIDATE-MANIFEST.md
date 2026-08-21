@@ -29,7 +29,8 @@ O arquivo `index.html` que acompanha a linhagem de backend deve ser tratado como
 |---|---|---|
 | Repo backend atual | `Eletrium/eletrium-field` | confirmado, porém contém frontend fóssil que deve ser ignorado para build Field |
 | Linha ativa backend | `active-os-backend-v2.1-20260815` | preservada |
-| Backend HMAC após Onda 3 | merge `3c2e002826d9a28f77137072cec5fa1bb323b2dd` | integrado; red-team independente do PR #4 ainda pendente |
+| Backend HMAC após Onda 3 | merge `3c2e002826d9a28f77137072cec5fa1bb323b2dd` | integrado; red-team independente do PR #4 concluído sem bloqueante |
+| PR #5 contrato pré-enforcement | `chatgpt/g5-session-contract-preenforcement-20260821` | teste somente; CI pendente antes de integrar |
 | FIELD_API_CONTRACT | `v1` | preservado durante rollout transicional |
 | Field fonte funcional | `eletrium-field-checklist3` | local / ainda sem SHA remoto canônico |
 | Field branch/build/commit candidato | — | **BLOQUEADO até materialização de `eletrium-field-checklist3`** |
@@ -42,22 +43,31 @@ O arquivo `index.html` que acompanha a linhagem de backend deve ser tratado como
 | SharePoint schema | PENDENTE INFORMAR | owner ainda precisa confirmar versão/schema |
 | ERP Admin build | PENDENTE INFORMAR | confirmar antes da homologação |
 
+## Decisão de contrato de sessão antes do enforcement
+
+- Em produção existe **uma única `_recusa` canônica**, definida em `Código.js`. `HMAC_Onda2.js` chama essa função global; a versão reduzida de 3 campos existe apenas no mock histórico do teste da Onda 2.
+- `retryable` representa repetição técnica automática. Para token expirado continuará `false`, porque repetir a mesma chamada com o mesmo token expirado geraria loop.
+- A migração do Field deve introduzir um sinal separado e explícito de **reautenticação necessária**, sem sobrecarregar `retryable`.
+- `verificarTokenSessao` real é fail-closed para token ausente, malformado, assinatura inválida, expirado e técnico divergente. PR #5 adiciona prova automatizada de robustez e consistência de envelope com código real.
+
 ## Pré-condições para autorizar criação de G6
 
-1. Red-team independente executado especificamente contra o PR #4 / árvore mergeada correspondente; achados do PR #3 são apenas histórico.
-2. `eletrium-field-checklist3` materializado em branch remota dedicada, com SHA estável e sem perda das funcionalidades P0/UX atuais.
-3. Migração G5 frontend concluída nessa mesma linhagem funcional: token emitido no login, armazenado e encaminhado nos call-sites definidos.
-4. Reconciliação de `registrarUsoVeiculo` concluída antes do enforcement obrigatório.
-5. E2E autenticado real executado entre Field autoritativo e backend candidato.
-6. SHA do backend candidato congelado e suíte de regressão sem falha crítica.
-7. Field branch/build/commit congelado a partir da linhagem `eletrium-field-checklist3`, nunca dos snapshots legacy.
-8. Make 1A scenario/version registrado.
-9. Make 1B scenario/version registrado.
-10. SharePoint schema/version registrado.
-11. ERP Admin build/commit registrado.
-12. `SESSAO_HMAC_SECRET` configurável apenas em Script Properties do futuro ambiente candidato; nunca no Git.
-13. `OFERTA_HMAC_SECRET` confirmado separadamente se o aceite de oferta entrar na candidata.
-14. Rollback conhecido para Field, Apps Script, Make e demais componentes envolvidos.
+1. Red-team independente executado especificamente contra o PR #4 / árvore mergeada correspondente — **CONCLUÍDO, sem bloqueante do PR**.
+2. PR #5 / contrato pré-enforcement com CI verde e integrado, ou decisão explícita equivalente registrada.
+3. `eletrium-field-checklist3` materializado em branch remota dedicada, com SHA estável e sem perda das funcionalidades P0/UX atuais.
+4. Migração G5 frontend concluída nessa mesma linhagem funcional: token emitido no login, armazenado e encaminhado nos call-sites definidos.
+5. Sinal separado de reautenticação implementado no Field/contrato antes do enforcement obrigatório; não reutilizar `retryable` para refresh/login.
+6. Reconciliação de `registrarUsoVeiculo` concluída antes do enforcement obrigatório.
+7. E2E autenticado real executado entre Field autoritativo e backend candidato.
+8. SHA do backend candidato congelado e suíte de regressão sem falha crítica.
+9. Field branch/build/commit congelado a partir da linhagem `eletrium-field-checklist3`, nunca dos snapshots legacy.
+10. Make 1A scenario/version registrado.
+11. Make 1B scenario/version registrado.
+12. SharePoint schema/version registrado.
+13. ERP Admin build/commit registrado.
+14. `SESSAO_HMAC_SECRET` configurável apenas em Script Properties do futuro ambiente candidato; nunca no Git.
+15. `OFERTA_HMAC_SECRET` confirmado separadamente se o aceite de oferta entrar na candidata.
+16. Rollback conhecido para Field, Apps Script, Make e demais componentes envolvidos.
 
 ## Manifesto a preencher somente antes de G6 real
 
@@ -73,6 +83,7 @@ Field branch:
 Field SHA:
 Field build/version:
 Prova de que Field não veio do index.html legacy: SIM/NÃO
+Sinal reauth separado de retry implementado: SIM/NÃO
 Make 1A scenario/version:
 Make 1B scenario/version:
 SharePoint schema/version:
