@@ -820,6 +820,23 @@ input[type=range]{width:100%;height:44px;accent-color:var(--green);cursor:pointe
       <div id="veiculo-status-badge" style="margin-top:6px"><span class="status-badge badge-neutro">Carregando...</span></div>
       <div id="veiculo-status-msg" style="font-size:13px;color:var(--text2);margin-top:10px;display:none"></div>
     </div>
+    <!-- Wire-up de registrarUsoVeiculo (21/08) -- reconciliacao pendente
+         desde a Onda 3 (achado: existe no backend, nenhum call site real
+         no Field). Fica SEPARADO do cadastro do veiculo -- muda o flag
+         Usa_Veiculo_Hoje da diaria de HOJE, nao o cadastro do veiculo em
+         si. So habilitado quando APP.usaVeiculoHoje ja e boolean (diaria
+         de hoje ja existe) -- evita a corrida documentada no proprio
+         backend (Codigo.js:1276-1285) entre registrarInicioDia e
+         registrarUsoVeiculo criando a linha da diaria quase ao mesmo
+         tempo, se disparados antes do dia comecar de verdade. -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">USO DO VEICULO HOJE</div>
+      <div id="uso-veiculo-hoje-msg" style="font-size:13px;color:var(--text2);margin:6px 0 10px"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline btn-sm" style="flex:1" id="btn-uso-veiculo-sim" onclick="atualizarUsoVeiculoHoje(true)">SIM</button>
+        <button class="btn btn-outline btn-sm" style="flex:1" id="btn-uso-veiculo-nao" onclick="atualizarUsoVeiculoHoje(false)">NAO</button>
+      </div>
+    </div>
     <div class="form-group">
       <label class="form-label">Tipo de veiculo</label>
       <select class="form-select" id="veiculo-tipo">
@@ -3218,6 +3235,47 @@ function irParaMeuVeiculo(origem) {
   document.getElementById('veiculo-sub').textContent = 'Autocadastro';
   showScreen('scr-meu-veiculo');
   _carregarFormVeiculo();
+  _renderizarUsoVeiculoHoje();
+}
+// registrarUsoVeiculo (21/08) -- reflete/atualiza o flag Usa_Veiculo_Hoje
+// da diaria de hoje. APP.usaVeiculoHoje === null significa "diaria de
+// hoje ainda nao existe" (dia nao comecou) -- os botoes ficam
+// desabilitados nesse estado pra nao disparar a corrida documentada no
+// backend entre registrarInicioDia/registrarUsoVeiculo (ver comentario
+// no HTML deste card).
+function _renderizarUsoVeiculoHoje() {
+  const msgEl = document.getElementById('uso-veiculo-hoje-msg');
+  const btnSim = document.getElementById('btn-uso-veiculo-sim');
+  const btnNao = document.getElementById('btn-uso-veiculo-nao');
+  if (APP.usaVeiculoHoje === null || APP.usaVeiculoHoje === undefined) {
+    msgEl.textContent = 'Inicie o dia primeiro para poder alterar o uso do veiculo hoje.';
+    btnSim.disabled = true; btnNao.disabled = true;
+    btnSim.classList.remove('btn-green'); btnNao.classList.remove('btn-green');
+    return;
+  }
+  btnSim.disabled = false; btnNao.disabled = false;
+  msgEl.textContent = APP.usaVeiculoHoje ? 'Voce esta usando veiculo hoje.' : 'Voce nao esta usando veiculo hoje.';
+  btnSim.classList.toggle('btn-green', APP.usaVeiculoHoje === true);
+  btnNao.classList.toggle('btn-green', APP.usaVeiculoHoje === false);
+}
+function atualizarUsoVeiculoHoje(usa) {
+  if (APP.usaVeiculoHoje === null || APP.usaVeiculoHoje === undefined) { toast('Inicie o dia primeiro', true); return; }
+  if (usa === APP.usaVeiculoHoje) return; // ja esta nesse estado, nada a fazer
+  showLoading('Atualizando...');
+  // gsCall plain (nao gsCallIdempotente) -- registrarUsoVeiculo(tecnicoId,
+  // usaVeiculo) no backend nao tem operationId/dispositivoId na
+  // assinatura hoje (Codigo.js:1658), mesma situacao de
+  // cadastrarOuEditarVeiculo logo abaixo nesta tela. Quando o token de
+  // sessao chegar (Onda 3), entra como mais um elemento neste mesmo
+  // array de params -- nao exige reescrita da chamada.
+  gsCall('registrarUsoVeiculo', [APP.tecnico.id, usa], { enfileiravelSeOffline: true, tipoOperacao: 'APONTAMENTO', osId: '' })
+    .then(res => {
+      hideLoading();
+      if (res && res.erro) { toast('Erro: ' + res.erro, true); return; }
+      APP.usaVeiculoHoje = usa;
+      _renderizarUsoVeiculoHoje();
+      toast(res && res.offline ? 'Salvo -- sera enviado quando o sinal voltar' : (usa ? 'Uso de veiculo hoje: ativado' : 'Uso de veiculo hoje: desativado'));
+    }).catch(() => { hideLoading(); toast('Erro ao atualizar uso do veiculo', true); });
 }
 function voltarMeuVeiculo() {
   const origem = APP.veiculoOrigem || 'scr-home';
