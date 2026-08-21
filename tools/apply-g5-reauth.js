@@ -15,15 +15,21 @@ function replaceOnce(text,needle,replacement,label){
   return text.replace(needle,replacement);
 }
 
-// Evidencia do sweep na baseline 20c53f41: 38 call-sites `return _recusa`
-// em Código.js + 2 em HMAC_Onda2.js = 40 call-sites runtime.
-const recusaCallsAntes=count(codigo,/return\s+_recusa\s*\(/g)+count(onda2,/return\s+_recusa\s*\(/g);
-assert(recusaCallsAntes===40,'sweep _recusa mudou: esperado 40 call-sites, encontrado '+recusaCallsAntes);
+// Evidencia de grep REAL no checkout completo do runner (run 32525512192):
+// o levantamento por snippets subestimava a quantidade. O grep executavel
+// encontrou 83 call-sites `return _recusa(...)` em Código.js+HMAC_Onda2.js.
+const recusaCodigoAntes=count(codigo,/return\s+_recusa\s*\(/g);
+const recusaOnda2Antes=count(onda2,/return\s+_recusa\s*\(/g);
+const recusaCallsAntes=recusaCodigoAntes+recusaOnda2Antes;
+console.log('SWEEP _recusa runtime:',JSON.stringify({codigo:recusaCodigoAntes,onda2:recusaOnda2Antes,total:recusaCallsAntes}));
+assert(recusaCallsAntes===83,'sweep _recusa mudou: esperado 83 call-sites, encontrado '+recusaCallsAntes);
 
-// 16 guards em Código.js + 1 no helper Onda2.
+// 16 guards em Código.js + 1 no helper Onda2 — segunda premissa a ser
+// confirmada pelo runner antes de qualquer escrita prospectiva.
 const guardOld=/if\s*\(!identidade\.ok\)\s*return\s+_recusa\(([^,\n]+),\s*identidade\.erro\);/g;
 const guardsCodigo=count(codigo,guardOld);
 const guardsOnda2=count(onda2,guardOld);
+console.log('SWEEP guards sessao:',JSON.stringify({codigo:guardsCodigo,onda2:guardsOnda2,total:guardsCodigo+guardsOnda2}));
 assert(guardsCodigo===16,'guards Código.js: esperado 16, encontrado '+guardsCodigo);
 assert(guardsOnda2===1,'guards HMAC_Onda2.js: esperado 1, encontrado '+guardsOnda2);
 
@@ -72,7 +78,9 @@ fs.writeFileSync(API,api);
 if(fs.existsSync('HMAC_Reauth.js'))fs.unlinkSync('HMAC_Reauth.js');
 
 console.log(JSON.stringify({
-  sweep_recusa_calls_before:recusaCallsAntes,
+  sweep_recusa_codigo:recusaCodigoAntes,
+  sweep_recusa_onda2:recusaOnda2Antes,
+  sweep_recusa_total:recusaCallsAntes,
   session_guards_before:guardsCodigo+guardsOnda2,
   session_guards_after:novosDepois,
   old_session_guards_after:oldDepois,
