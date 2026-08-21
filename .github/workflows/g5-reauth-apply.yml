@@ -1,37 +1,31 @@
-name: G5 REAUTH One Shot Apply
+name: G5 REAUTH Patch Proof
 
 on:
-  push:
-    branches:
-      - chatgpt/g5-reauth-backend-20260821
-    paths:
-      - '.github/workflows/g5-reauth-apply.yml'
   pull_request:
     branches:
       - active-os-backend-v2.1-20260815
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-reauth:
-    if: github.event_name == 'push' || github.head_ref == 'chatgpt/g5-reauth-backend-20260821'
+  prove-reauth-patch:
+    if: github.head_ref == 'chatgpt/g5-reauth-backend-20260821'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout head branch
+      - name: Checkout PR head
         uses: actions/checkout@v4
         with:
-          ref: chatgpt/g5-reauth-backend-v2.1-20260821
-          fetch-depth: 0
+          ref: chatgpt/g5-reauth-backend-20260821
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Apply deterministic patch
+      - name: Apply deterministic patch in runner only
         run: node tools/apply-g5-reauth.js
 
       - name: Run REAUTH test
@@ -40,23 +34,9 @@ jobs:
       - name: Run full portable G5 suite
         run: node tests/g5-token-sessao/run-all-portable.js
 
-      - name: Verify final runtime diff
+      - name: Verify prospective diff
         run: |
           git status --short
           git diff --check
           grep -RIn "if (!identidade.ok) return _recusa(" Código.js HMAC_Onda2.js && exit 1 || true
-
-      - name: Remove one-shot applicator
-        run: |
-          rm -f tools/apply-g5-reauth.js
-          rm -f .github/workflows/g5-reauth-apply.yml
-          rmdir tools 2>/dev/null || true
-
-      - name: Commit applied patch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- Código.js HMAC_Onda2.js API.js Checklist.js tests/g5-token-sessao/test-reauth-required-backend.js HMAC_Reauth.js tools/apply-g5-reauth.js .github/workflows/g5-reauth-apply.yml
-          git status --short
-          git commit -m "feat(g5): implementar contrato REAUTH_REQUIRED backend"
-          git push origin HEAD:chatgpt/g5-reauth-backend-20260821
+          test ! -f HMAC_Reauth.js
