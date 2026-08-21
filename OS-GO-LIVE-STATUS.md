@@ -8,8 +8,8 @@
 | G2 — 1B newest-wins | Claude | 🟡 EM TESTE | Make 1B | casos A/C/D ainda exigem confirmação final conforme último handoff | quatro casos com dado real |
 | G3 — E2E-SYNC-CONFLICT | Claude | ⏸️ AGUARDANDO G2 | 1A + 1B | G2 | `ROTEIRO-E2E-SYNC-CONFLICT.md` |
 | G4 — Retry automático | Claude + ação operacional | 🟡 NÃO FECHADO | scanner Make 5952040 | confirmação real do Run once / resultado | execução real + teto/retry |
-| G5 — Sessão HMAC / E-TOCTOU-01 | ChatGPT | 🟡 EM EXECUÇÃO | backend integrado + Field divergente | red-team específico do PR #4; materializar Field autoritativo; migrar token no frontend; reconciliar `registrarUsoVeiculo`; E2E; enforcement | PR #4 mergeado e CI verde, mas red-team independente específico ainda pendente |
-| G6 — Homologação candidata | ChatGPT; Claude co-review | ⛔ NÃO CRIADO | preparação documental apenas | G5 frontend + Field SHA autoritativo + versões Make/SP/Admin + demais pré-condições | `G6-CANDIDATE-MANIFEST.md` atualizado; nenhum candidate deployment existe |
+| G5 — Sessão HMAC / E-TOCTOU-01 | ChatGPT | 🟡 EM EXECUÇÃO | backend integrado + Field divergente | materializar Field autoritativo; migrar token no frontend; sinal separado de reautenticação; reconciliar `registrarUsoVeiculo`; E2E; enforcement | PR #4 red-team independente concluído sem bloqueante; PR #5 valida contrato pré-enforcement |
+| G6 — Homologação candidata | ChatGPT; Claude co-review | ⛔ NÃO CRIADO | preparação documental apenas | G5 frontend + Field SHA autoritativo + versões Make/SP/Admin + demais pré-condições | `G6-CANDIDATE-MANIFEST.md`; nenhum candidate deployment existe |
 | G7 — Deploy | coordenado | ⏹️ NÃO INICIADO | — | G2-G6 | plano + rollback |
 | G8 — Produção assistida | coordenado | ⏹️ NÃO INICIADO | — | G7 | OS real controlada ponta a ponta |
 
@@ -61,15 +61,29 @@ A presença de `index.html` dentro da branch de backend não o promove a fronten
 - testes específicos: 12 PASS / 0 FAIL; runner portátil sem regressão.
 - merge da Onda 2 na linha ativa concluído.
 
-## Evidência G5 — Onda 3
+## Evidência G5 — Onda 3 / PR #4
 
 - PR #3 foi supersedido e fechado sem merge.
 - PR #4: `chatgpt/g5-hmac-onda3-clean-20260820`; commit `7b7a52bcd606e9d5852f4bb0f8640add601d8392`; squash merge `3c2e002826d9a28f77137072cec5fa1bb323b2dd`.
 - CI do PR #4: SUCCESS; Onda 3 65 PASS / 0 FAIL; runner portátil 31 arquivos PASS / 0 FAIL.
-- o PR #4 altera a prova de recusa para o contrato canônico `success:false`, inclui `getDiariaHoje` e amplia casos negativos.
-- **red-team do PR #3 não é evidência final do PR #4**; novo red-team independente específico do #4 continua pendente.
-- `registrarUsoVeiculo`: função existente no backend, sem case/call-site real confirmado; reconciliar antes do enforcement obrigatório.
+- red-team independente Cowork 2 executado especificamente contra o PR #4: **zero bloqueante para o PR**.
+- três achados antigos do PR #3 foram confirmados resolvidos por inspeção independente: `isRejected`/`_recusa`, mutação negativa de token e existência/status órfão de `registrarUsoVeiculo`.
+- `getDiariaHoje` foi inspecionado diretamente no PR #4 e o guard de identidade confirmado.
+
+### Novos pontos do red-team PR #4
+
+1. Foi levantada aparente divergência de `_recusa` entre Onda 2 e Onda 3. Inspeção do runtime mostrou que `HMAC_Onda2.js` **não define uma segunda `_recusa`**; a versão de 3 campos existe no mock do teste da Onda 2. Em produção, ambas as ondas usam a `_recusa` global/canônica de `Código.js`. PR #5 adiciona prova automatizada com código real para impedir regressão dessa percepção/harness.
+2. `retryable:false` para sessão expirada fica **deliberado**: retry automático com o mesmo token expirado produziria loop. A migração do Field deve receber sinal separado de reautenticação, sem reutilizar `retryable` para esse propósito.
+3. `verificarTokenSessao` real foi localizado e inspecionado: fail-closed para ausência, malformação, assinatura inválida, expiração e técnico divergente. A suíte de fundação já carrega `Código.js` real via `vm`; PR #5 amplia a prova explícita de que entradas adversariais não lançam exceção.
+
+## PR #5 — contrato pré-enforcement
+
+- branch: `chatgpt/g5-session-contract-preenforcement-20260821`
+- base: `3c2e002826d9a28f77137072cec5fa1bb323b2dd`
+- escopo: **teste somente**, sem alteração de runtime
+- objetivo: provar envelope canônico único Onda 2/3, semântica de `retryable` e robustez do verifier antes de migrar o Field
+- merge somente após CI verde; não cria G6 e não autoriza enforcement.
 
 ## Próxima sequência G5 → G6
 
-`red-team PR #4 → materializar eletrium-field-checklist3 em branch remota → migrar sessão/token no Field real → reconciliar registrarUsoVeiculo → E2E autenticado → congelar SHAs/versões de todos os componentes → owner autoriza criação do G6 → homologação integrada`.
+`PR #5 CI → materializar eletrium-field-checklist3 em branch remota → inspecionar/fixar Field SHA → migrar sessão/token + sinal de reautenticação no Field real → reconciliar registrarUsoVeiculo → E2E autenticado → congelar SHAs/versões de todos os componentes → owner autoriza criação do G6 → homologação integrada`.
