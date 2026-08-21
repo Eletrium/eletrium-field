@@ -1,0 +1,3560 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0D1117">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Eletrium Field</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0D1117;
+  --bg2:#161B22;
+  --bg3:#21262D;
+  --green:#22B573;
+  --green2:#1A9A60;
+  --red:#E74C3C;
+  --yellow:#F39C12;
+  --gray:#8B949E;
+  --text:#E6EDF3;
+  --text2:#B3C0CC;
+  --border:#30363D;
+  --radius:12px;
+  --shadow:0 4px 20px rgba(0,0,0,.5);
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;overflow-x:hidden}
+.screen{display:none;min-height:100vh;flex-direction:column}
+.screen.active{display:flex}
+.hdr{background:var(--bg2);padding:14px 16px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+.hdr-back{width:40px;height:40px;background:var(--bg3);border:none;border-radius:8px;color:var(--text);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.hdr-title{flex:1;font-size:18px;font-weight:700;color:var(--text)}
+.hdr-sub{font-size:12px;color:var(--gray);margin-top:1px}
+.content{flex:1;padding:16px;overflow-y:auto;padding-bottom:80px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.card-title{font-size:13px;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.card-value{font-size:22px;font-weight:700;color:var(--text)}
+.card-sub{font-size:13px;color:var(--gray);margin-top:4px}
+.btn{width:100%;padding:18px;border:none;border-radius:var(--radius);font-size:17px;font-weight:700;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:10px;transition:opacity .15s,transform .1s}
+.btn:active{transform:scale(.97);opacity:.9}
+.btn-green{background:var(--green);color:#fff}
+.btn-red{background:var(--red);color:#fff}
+.btn-yellow{background:var(--yellow);color:#fff}
+.btn-gray{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+.btn-outline{background:transparent;color:var(--green);border:2px solid var(--green)}
+.btn-sm{padding:12px;font-size:15px}
+.btn-disabled{opacity:.4;pointer-events:none}
+.timer-block{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center;margin-bottom:16px}
+.timer-label{font-size:12px;color:var(--gray);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.timer-display{font-size:54px;font-weight:800;color:var(--green);letter-spacing:2px;font-variant-numeric:tabular-nums}
+.timer-display.paused{color:var(--yellow)}
+.timer-os{font-size:14px;color:var(--text2);margin-top:6px}
+.os-item{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;cursor:pointer;transition:border-color .15s}
+.os-item:active{border-color:var(--green)}
+.os-item.active-os{border-color:var(--green);border-width:2px}
+.os-item.paused-os{border-color:var(--yellow);border-width:2px}
+.os-id{font-size:11px;color:var(--gray);margin-bottom:4px}
+.os-cliente{font-size:16px;font-weight:700;color:var(--text)}
+.os-desc{font-size:13px;color:var(--text2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.os-badges{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.badge{font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px}
+.badge-green{background:rgba(34,181,115,.2);color:var(--green)}
+.badge-yellow{background:rgba(243,156,18,.2);color:var(--yellow)}
+.badge-red{background:rgba(231,76,60,.2);color:var(--red)}
+.badge-gray{background:var(--bg3);color:var(--gray)}
+.form-group{margin-bottom:14px}
+.form-label{font-size:13px;color:var(--gray);margin-bottom:6px;display:block;font-weight:600}
+.form-input,.form-select,.form-textarea{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:16px;padding:14px;outline:none;transition:border-color .2s}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--green)}
+.form-textarea{min-height:80px;resize:vertical;font-family:inherit}
+.form-select option{background:var(--bg3)}
+.motivo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.motivo-btn{background:var(--bg3);border:2px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-weight:600;padding:16px 10px;cursor:pointer;text-align:center;transition:all .15s;line-height:1.3}
+.motivo-btn:active,.motivo-btn.selected{border-color:var(--green);background:rgba(34,181,115,.1);color:var(--green)}
+.motivo-btn .motivo-icon{font-size:24px;display:block;margin-bottom:6px}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.stat-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+.stat-val{font-size:22px;font-weight:800;color:var(--green)}
+.stat-lbl{font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+.progress-bar{height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin:8px 0}
+.progress-fill{height:100%;background:var(--green);border-radius:4px;transition:width .5s}
+.divider{height:1px;background:var(--border);margin:16px 0}
+.alert{background:rgba(34,181,115,.1);border:1px solid rgba(34,181,115,.3);border-radius:8px;padding:12px;font-size:13px;color:var(--green);margin-bottom:12px;display:flex;gap:8px}
+.alert-warn{background:rgba(243,156,18,.1);border-color:rgba(243,156,18,.3);color:var(--yellow)}
+.alert-err{background:rgba(231,76,60,.1);border-color:rgba(231,76,60,.3);color:var(--red)}
+#loading{display:none;position:fixed;inset:0;background:rgba(13,17,23,.85);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:16px}
+#loading.show{display:flex}
+.spinner{width:44px;height:44px;border:4px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-msg{color:var(--gray);font-size:14px}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--bg2);border:1px solid var(--green);color:var(--text);padding:12px 20px;border-radius:40px;font-size:14px;font-weight:600;z-index:1000;transition:transform .3s,opacity .3s;opacity:0;white-space:nowrap}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+#toast.err{border-color:var(--red);color:var(--red)}
+.tec-btn{background:var(--bg2);border:2px solid var(--border);border-radius:var(--radius);padding:18px;display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:10px;transition:all .15s}
+.tec-btn:active,.tec-btn.selected{border-color:var(--green)}
+.tec-avatar{width:44px;height:44px;background:var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff;flex-shrink:0}
+.tec-nome{font-size:17px;font-weight:700;color:var(--text)}
+.tec-id{font-size:12px;color:var(--gray)}
+.pct-display{font-size:36px;font-weight:800;color:var(--green);text-align:center;margin:8px 0}
+input[type=range]{width:100%;height:44px;accent-color:var(--green);cursor:pointer}
+.bottom-cta{position:fixed;bottom:0;left:0;right:0;padding:12px 16px 24px;background:linear-gradient(transparent,var(--bg) 30%)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
+.dot-green{background:var(--green)}
+.dot-yellow{background:var(--yellow)}
+.dot-gray{background:var(--gray)}
+.status-badge{display:inline-block;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700}
+.badge-neutro{background:var(--bg3);color:var(--gray)}
+.badge-aprovado{background:rgba(34,181,115,.15);color:var(--green);border:1px solid rgba(34,181,115,.3)}
+.badge-pendente{background:rgba(243,156,18,.15);color:var(--yellow);border:1px solid rgba(243,156,18,.3)}
+.badge-rejeitado{background:rgba(231,76,60,.15);color:var(--red);border:1px solid rgba(231,76,60,.3)}
+#offline-banner{display:none;background:var(--yellow);color:#000;text-align:center;font-size:12px;font-weight:700;padding:6px;position:sticky;top:0;z-index:200}
+#offline-banner.show{display:block}
+#build-id{position:fixed;bottom:2px;right:6px;font-size:9px;color:var(--gray);opacity:.5;z-index:50;pointer-events:none;font-family:monospace;white-space:nowrap}
+#scr-bloqueio-contrato{display:none;position:fixed;inset:0;background:var(--bg);z-index:1001;align-items:center;justify-content:center;flex-direction:column;padding:24px}
+#scr-bloqueio-contrato.show{display:flex}
+</style>
+</head>
+<body>
+
+<div id="offline-banner">SEM CONEXÃO — dados serão enviados quando o sinal voltar</div>
+<div id="loading"><div class="spinner"></div><div class="loading-msg" id="loading-msg">Aguarde...</div></div>
+<div id="toast"></div>
+<div id="build-id"></div>
+
+<!-- Gate de compatibilidade de contrato de API (Seção 19). Cobre a tela
+     inteira -- nenhum outro fluxo (login, oferta, offline) segue
+     adiante quando o backend confirma um FIELD_API_CONTRACT diferente
+     do esperado. Ver CONTRATO-BACKEND-FIELD-API-CONTRACT.md. -->
+<div id="scr-bloqueio-contrato">
+  <div class="card" style="border-color:var(--red);max-width:420px">
+    <div style="color:var(--red);font-weight:700;font-size:18px;margin-bottom:8px">Aplicativo desatualizado</div>
+    <div style="color:var(--text2);font-size:14px;line-height:1.5">
+      Esta versão do aplicativo não é mais compatível com o servidor. Feche e abra o app novamente (ou atualize a página) para carregar a versão mais recente. Nenhum dado foi perdido.
+    </div>
+    <div style="color:var(--gray);font-size:11px;margin-top:12px;font-family:monospace" id="bloqueio-contrato-detalhe"></div>
+  </div>
+</div>
+
+<!-- TELA 0: INICIO DO DIA -->
+<div id="scr-inicio-dia" class="screen">
+  <div class="hdr">
+    <div style="flex:1">
+      <div class="hdr-title">Inicio do Dia</div>
+      <div class="hdr-sub" id="inicio-sub">Bom dia!</div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="card" id="card-veiculo-pergunta">
+      <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text)">
+        Voce esta usando seu veiculo proprio hoje?
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <button class="btn btn-green" style="margin-bottom:0" onclick="responderVeiculo(true)">Sim, veiculo proprio</button>
+        <button class="btn btn-gray" style="margin-bottom:0" onclick="responderVeiculo(false)">Nao</button>
+      </div>
+    </div>
+    <div id="card-km" style="display:none">
+      <div class="divider"></div>
+      <div class="form-group">
+        <label class="form-label">KM inicial do veiculo (odometro)</label>
+        <input class="form-input" type="number" id="inicio-km" placeholder="Ex: 12450" inputmode="numeric" min="0" step="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Placa / Identificacao do veiculo <span style="color:var(--gray)">(opcional)</span></label>
+        <input class="form-input" id="inicio-veiculo-id" placeholder="Ex: ABC-1234 ou Moto Honda">
+      </div>
+      <button class="btn btn-green" onclick="confirmarInicioDia(true)">INICIAR DIA</button>
+    </div>
+    <div id="card-sem-km" style="display:none">
+      <button class="btn btn-green" onclick="confirmarInicioDia(false)">INICIAR DIA</button>
+    </div>
+    <div id="card-sem-veiculo" style="display:none">
+      <div class="divider"></div>
+      <div class="card" style="border-color:var(--yellow)">
+        <div style="font-size:14px;font-weight:700;color:var(--yellow);margin-bottom:8px">Veiculo nao cadastrado</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:16px" id="sem-veiculo-msg">
+          Voce ainda nao tem veiculo cadastrado ou aprovado. Cadastre agora para registrar o KM e receber o reembolso.
+        </div>
+        <button class="btn btn-outline btn-sm" style="margin-bottom:8px" onclick="irParaMeuVeiculo('scr-inicio-dia')">CADASTRAR VEICULO</button>
+        <button class="btn btn-gray btn-sm" onclick="confirmarInicioDia(false)">Continuar sem KM</button>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <button class="btn btn-gray btn-sm" onclick="logOut()">Sair</button>
+  </div>
+</div>
+
+<!-- TELA 1: LOGIN -->
+<!-- UX (15/08, pedido do Geovane): antes listava TODOS os tecnicos
+     cadastrados pra tocar -- expunha a lista completa de nomes na tela.
+     Agora é um campo de nome (digitado) + PIN na sequência normal;
+     getTecnicos() continua buscado em segundo plano (precisa do
+     mapeamento nome->ID pra achar o tecnicoId certo), só não é mais
+     renderizado como lista visível. -->
+<div id="scr-login" class="screen active">
+  <div class="hdr">
+    <div style="flex:1">
+      <div class="hdr-title">Eletrium Field</div>
+      <div class="hdr-sub">Digite seu nome para comecar</div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="form-group">
+      <label class="form-label">Nome</label>
+      <input class="form-input" type="text" id="login-nome-input" placeholder="Seu nome completo" autocomplete="name" autocapitalize="words">
+    </div>
+    <button class="btn btn-green" onclick="confirmarNomeLogin()">CONTINUAR</button>
+    <div id="login-erro" class="alert alert-err" style="display:none">Erro ao carregar tecnicos</div>
+  </div>
+</div>
+
+<!-- TELA 1B: PIN -->
+<div id="scr-pin" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-login')">&#8249;</button>
+    <div style="flex:1">
+      <div class="hdr-title">Digite seu PIN</div>
+      <div class="hdr-sub" id="pin-tecnico-nome"></div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="form-group">
+      <input class="form-input" type="password" inputmode="numeric" pattern="[0-9]*"
+             id="pin-input" maxlength="4" placeholder="••••"
+             style="text-align:center;font-size:32px;letter-spacing:12px"
+             autocomplete="off">
+    </div>
+    <div id="pin-erro" class="alert alert-err" style="display:none">PIN incorreto. Tente novamente.</div>
+    <button class="btn btn-green" onclick="confirmarPin()">ENTRAR</button>
+  </div>
+</div>
+
+<!-- TELA OFERTA-A: PIN pra aceite de oferta via link profundo (Frente B,
+     fatia 5, Diretriz v1.1). Gate PRÓPRIO, separado do login normal
+     (scr-pin/confirmarPin) -- reusa a mesma action validarPin, mas não
+     entra no fluxo normal do app (sem getDiariaHoje/carregarHome): a
+     identidade do link já vem fixa (Tecnico_ID), só falta confirmar o
+     PIN pra essa ação pontual. -->
+<div id="scr-oferta-pin" class="screen">
+  <div class="hdr">
+    <div style="flex:1">
+      <div class="hdr-title">Oferta de serviço</div>
+      <div class="hdr-sub">Digite seu PIN pra ver a oferta</div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="form-group">
+      <input class="form-input" type="password" inputmode="numeric" pattern="[0-9]*"
+             id="oferta-pin-input" maxlength="4" placeholder="••••"
+             style="text-align:center;font-size:32px;letter-spacing:12px"
+             autocomplete="off">
+    </div>
+    <div id="oferta-pin-erro" class="alert alert-err" style="display:none"></div>
+    <button class="btn btn-green" onclick="confirmarPinOferta()">VER OFERTA</button>
+  </div>
+</div>
+
+<!-- TELA OFERTA-B: detalhe da oferta + aceite/recusa -->
+<div id="scr-oferta" class="screen">
+  <div class="hdr">
+    <div style="flex:1">
+      <div class="hdr-title">Oferta de serviço</div>
+      <div class="hdr-sub" id="oferta-os-id"></div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title">Resumo</div>
+      <div style="font-size:15px;color:var(--text);margin-top:6px" id="oferta-resumo"></div>
+    </div>
+    <div id="oferta-valor-bloco" class="card" style="margin-bottom:14px;display:none">
+      <div class="card-title">Valor proposto</div>
+      <div style="font-size:20px;font-weight:800;color:var(--green);margin-top:4px" id="oferta-valor"></div>
+    </div>
+    <div class="hdr-sub" id="oferta-prazo" style="margin-bottom:14px"></div>
+    <button class="btn btn-green" onclick="aceitarOferta()">ACEITAR PRESTAÇÃO DE SERVIÇO</button>
+    <div class="divider"></div>
+    <div class="form-group">
+      <label class="form-label">Motivo da recusa (obrigatório pra recusar)</label>
+      <textarea class="form-textarea" id="oferta-motivo-recusa" placeholder="Explique por que não pode aceitar..."></textarea>
+    </div>
+    <button class="btn btn-outline" style="border-color:var(--red);color:var(--red)" onclick="recusarOferta()">RECUSAR</button>
+  </div>
+</div>
+
+<!-- TELA OFERTA-C: status final (erro de link/expirada/já respondida, ou sucesso do aceite/recusa) -->
+<div id="scr-oferta-status" class="screen">
+  <div class="hdr"><div style="flex:1"><div class="hdr-title">Oferta de serviço</div></div></div>
+  <div class="content">
+    <div class="card" id="oferta-status-card" style="text-align:center;padding:28px">
+      <div style="font-size:16px;font-weight:700" id="oferta-status-titulo"></div>
+      <div style="font-size:14px;color:var(--text2);margin-top:8px" id="oferta-status-msg"></div>
+    </div>
+    <button class="btn btn-gray" style="margin-top:16px" onclick="fecharTelaOferta()">FECHAR</button>
+  </div>
+</div>
+
+<!-- TELA 2: HOME -->
+<div id="scr-home" class="screen">
+  <div class="hdr">
+    <div style="flex:1">
+      <div class="hdr-title" id="home-titulo">Minhas OS</div>
+      <div class="hdr-sub" id="home-sub">Hoje</div>
+    </div>
+    <button class="hdr-back" onclick="irParaMeuVeiculo('scr-home')" title="Meu Veiculo">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M6 17a2 2 0 100 4 2 2 0 000-4zm12 0a2 2 0 100 4 2 2 0 000-4zM5 17V9l2-4h10l2 4v8"/></svg>
+    </button>
+    <button class="hdr-back" onclick="irParaResumo()" title="Resumo do dia">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+    </button>
+    <button class="hdr-back" onclick="logOut()" title="Sair">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+    </button>
+  </div>
+  <div class="content">
+    <!-- Home contextual -- reorganizacao de UX (13/08, secoes 49-55 do
+         documento do auditor). "SEU DIA" agrupa o que já existia (OS
+         ativa/pausada, mesmos ids -- iniciarCronometro/
+         restaurarCronometroAoCarregar continuam funcionando igual)
+         mais 2 blocos novos: status de sincronizacao humanizado (Fase
+         A, ja commitada) e a lista de OS separada em "Próximas" (só o
+         que ainda não começou -- a ativa/pausada já tem card próprio,
+         não precisa aparecer 2x). -->
+    <div style="font-size:11px;color:var(--gray);text-transform:uppercase;font-weight:700;letter-spacing:.5px;margin-bottom:10px">Seu dia</div>
+    <div id="home-timer-block" style="display:none">
+      <div class="timer-block">
+        <div class="timer-label">OS ATIVA</div>
+        <div class="timer-display" id="home-timer">00:00:00</div>
+        <div class="timer-os" id="home-timer-os"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+        <button class="btn btn-yellow btn-sm" onclick="irParaPausar()">PAUSAR</button>
+        <button class="btn btn-red btn-sm" onclick="irParaEncerrar()">ENCERRAR</button>
+      </div>
+    </div>
+    <div id="home-pausa-block" style="display:none">
+      <div class="alert alert-warn">
+        <span>P</span>
+        <div><strong>OS pausada:</strong> <span id="home-pausa-motivo"></span><br>
+        <button onclick="irParaPausada()" style="background:none;border:none;color:var(--yellow);font-weight:700;padding:4px 0;cursor:pointer;font-size:13px">Ver OS pausada</button></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">Pendências</div>
+      <div id="home-sync-status" style="margin-top:6px"></div>
+    </div>
+    <!-- UX (15/08, pedido do Geovane): com uma OS ativa, o ambiente foca
+         só nela -- a lista de "Próximas" (id envolvente pra esconder
+         label+lista juntos) some enquanto ela estiver em andamento,
+         ver renderHome(). -->
+    <div id="home-proximas-secao">
+      <div style="font-size:11px;color:var(--gray);text-transform:uppercase;font-weight:700;letter-spacing:.5px;margin-bottom:10px">Próximas</div>
+      <div id="home-os-lista">
+        <div class="card" style="text-align:center;padding:32px">
+          <div style="color:var(--gray)">Carregando ordens de servico...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TELA 3: OS ATIVA -->
+<div id="scr-os-ativa" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-home')">&#8249;</button>
+    <div style="flex:1">
+      <div class="hdr-title" id="ativa-id"></div>
+      <div class="hdr-sub" id="ativa-cliente"></div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="timer-block">
+      <div class="timer-label">TEMPO PRODUTIVO</div>
+      <div class="timer-display" id="ativa-timer">00:00:00</div>
+      <div class="timer-os" id="ativa-desc"></div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-box"><div class="stat-val" id="ativa-realizado">0</div><div class="stat-lbl" id="ativa-unidade">Realizado</div></div>
+      <div class="stat-box"><div class="stat-val" id="ativa-meta">0</div><div class="stat-lbl">Meta</div></div>
+      <div class="stat-box"><div class="stat-val" id="ativa-pct">0%</div><div class="stat-lbl">Progresso</div></div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="ativa-progress" style="width:0%"></div></div>
+    <div class="divider"></div>
+    <button class="btn btn-yellow" onclick="irParaPausar()">PAUSAR OS</button>
+    <button class="btn btn-red" onclick="irParaEncerrar()">ENCERRAR OS</button>
+    <button class="btn btn-outline btn-sm" onclick="irParaChecklist()">Checklist da OS (Segurança + Execução)</button>
+    <button class="btn btn-outline btn-sm" onclick="irParaSelfieEPI()">Selfie + EPI + Diário</button>
+    <button class="btn btn-outline btn-sm" onclick="irParaFerramental()">Ferramental (carga/desmobilização)</button>
+    <button class="btn btn-gray btn-sm" onclick="irParaEmergencia()">OS Emergencia (mesmo cliente)</button>
+  </div>
+</div>
+
+<!-- TELA 3B: SELFIE + EPI + DIARIO — Frente B, fatia 2 (Diretriz v1.1) -->
+<div id="scr-selfie-epi" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar(APP.osAtiva ? 'scr-os-ativa' : 'scr-pausada')">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">Selfie + EPI + Diário</div><div class="hdr-sub" id="selfie-epi-id"></div></div>
+  </div>
+  <div class="content">
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title">Selfie com EPI</div>
+      <input type="file" id="selfie-input" accept="image/*" capture="user" style="margin-top:8px">
+      <div id="selfie-status" style="font-size:12px;color:var(--gray);margin-top:6px">Nenhuma selfie enviada ainda</div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title">Checklist de EPI</div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" id="epi-capacete"> Capacete</label>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" id="epi-luvas"> Luvas isolantes</label>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" id="epi-oculos"> Óculos de proteção</label>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" id="epi-calcado"> Calçado de segurança</label>
+      <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="epi-cinto"> Cinto de segurança</label>
+    </div>
+    <div class="form-group"><label class="form-label">Diário do técnico</label><textarea class="form-textarea" id="diario-texto" placeholder="Relato do dia, condições encontradas, observações..."></textarea></div>
+    <button class="btn btn-green" onclick="enviarSelfieEPI()">Salvar</button>
+    <div id="selfie-epi-status" style="font-size:12px;color:var(--gray);margin-top:10px">Elegibilidade financeira depende de selfie + diário preenchidos</div>
+  </div>
+</div>
+
+<!-- TELA 3C: FERRAMENTAL (carga/desmobilização) — Frente B, fatia 6
+     (Diretriz v1.1). Fatia MÍNIMA de propósito, ver aviso completo no
+     bloco JS: sem catálogo/calibração/obrigatoriedade (dado não existe
+     no PWA hoje, só no SharePoint via sync que é escopo do Cowork) --
+     código do patrimônio é digitado à mão, não escolhido de uma lista. -->
+<div id="scr-ferramental" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar(APP.osAtiva ? 'scr-os-ativa' : 'scr-pausada')">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">Ferramental</div><div class="hdr-sub" id="ferramental-os-id"></div></div>
+  </div>
+  <div class="content">
+    <div class="alert alert-warn" style="margin-bottom:14px">
+      Sem catálogo nem checagem de calibração nesta versão — digite o código do
+      patrimônio (etiqueta da ferramenta) manualmente.
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title">Novo registro</div>
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline btn-sm" id="ferramental-btn-carga" style="flex:1" onclick="selecionarTipoFerramental('Carga')">CARGA</button>
+          <button class="btn btn-outline btn-sm" id="ferramental-btn-desmob" style="flex:1" onclick="selecionarTipoFerramental('Desmobilizacao')">DESMOBILIZAÇÃO</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Código do patrimônio</label>
+        <input class="form-input" id="ferramental-patrimonio" placeholder="Ex: FER-0231">
+      </div>
+      <div id="ferramental-desmob-bloco" style="display:none">
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <input type="checkbox" id="ferramental-estado-ok" checked onchange="atualizarObsFerramentalVisibilidade()"> Estado OK
+        </label>
+        <div class="form-group" id="ferramental-obs-bloco" style="display:none">
+          <label class="form-label">Observação (obrigatória se estado não OK)</label>
+          <textarea class="form-textarea" id="ferramental-observacao" placeholder="Descreva o problema..."></textarea>
+        </div>
+      </div>
+      <button class="btn btn-green" onclick="registrarMovimentoFerramental()">REGISTRAR</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Registrados nesta OS</div>
+      <div id="ferramental-lista" style="margin-top:8px;font-size:13px;color:var(--text2)">Nenhum registro ainda</div>
+    </div>
+  </div>
+</div>
+
+<!-- TELA 4: PAUSAR -->
+<div id="scr-pausar" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-os-ativa')">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">Pausar OS</div><div class="hdr-sub" id="pausar-id"></div></div>
+  </div>
+  <div class="content">
+    <div class="card-title" style="margin-bottom:12px">Motivo da interrupcao</div>
+    <div class="motivo-grid">
+      <button class="motivo-btn" onclick="selecionarMotivo('Almoco')"><span class="motivo-icon">A</span>Almoco</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Deslocamento')"><span class="motivo-icon">D</span>Deslocamento</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Material')"><span class="motivo-icon">M</span>Buscar material</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Tecnico')"><span class="motivo-icon">T</span>Problema tecnico</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Cliente')"><span class="motivo-icon">C</span>Aguardando cliente</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('OS Emergencia')"><span class="motivo-icon">!</span>OS Emergencia</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Reuniao')"><span class="motivo-icon">R</span>Reuniao</button>
+      <button class="motivo-btn" onclick="selecionarMotivo('Outro')"><span class="motivo-icon">?</span>Outro</button>
+    </div>
+    <div class="form-group" id="pausar-outro-grupo" style="display:none">
+      <label class="form-label">Descreva o motivo</label>
+      <input class="form-input" id="pausar-outro-texto" placeholder="Ex: Chuva forte..." maxlength="100">
+    </div>
+    <button class="btn btn-yellow" id="btn-confirmar-pausa" onclick="confirmarPausa()" disabled style="opacity:.5">CONFIRMAR PAUSA</button>
+  </div>
+</div>
+
+<!-- TELA 5: PAUSADA -->
+<div id="scr-pausada" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-home')">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">OS Pausada</div><div class="hdr-sub" id="pausada-id"></div></div>
+  </div>
+  <div class="content">
+    <div class="card"><div class="card-title">Motivo da pausa</div><div class="card-value" id="pausada-motivo" style="font-size:18px"></div></div>
+    <div class="card"><div class="card-title">Tempo produtivo acumulado</div><div class="card-value" id="pausada-horas" style="color:var(--green)"></div></div>
+    <div class="divider"></div>
+    <button class="btn btn-green" onclick="confirmarRetomar()">RETOMAR OS</button>
+    <button class="btn btn-gray btn-sm" onclick="irParaEmergencia()">Criar OS Emergencia</button>
+    <button class="btn btn-red btn-sm" onclick="irParaEncerrar()">Encerrar esta OS</button>
+  </div>
+</div>
+
+<!-- TELA 6: EMERGENCIA -->
+<div id="scr-emergencia" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar(APP.osAtiva ? 'scr-os-ativa' : 'scr-pausada')">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">OS Emergencia</div><div class="hdr-sub">Mesmo cliente - novo chamado</div></div>
+  </div>
+  <div class="content">
+    <div class="alert alert-warn">A OS atual sera pausada automaticamente ao criar a emergencia.</div>
+    <div class="form-group"><label class="form-label">Descricao do problema</label><textarea class="form-textarea" id="emg-desc" placeholder="Descreva o problema de emergencia..." rows="4"></textarea></div>
+    <div class="form-group"><label class="form-label">Local</label><input class="form-input" id="emg-local" placeholder="Ex: Sala 302, Painel principal..."></div>
+    <button class="btn btn-red" onclick="confirmarEmergencia()">CRIAR OS EMERGENCIA</button>
+    <button class="btn btn-gray btn-sm" onclick="voltar(APP.osAtiva ? 'scr-os-ativa' : 'scr-pausada')">Cancelar</button>
+  </div>
+</div>
+
+<!-- TELA 7: ENCERRAR -->
+<!-- Encerramento de OS: wizard de 6 etapas (Execução -> Pendências ->
+     Evidências -> Aceite -> Revisão -> Concluir) -- reorganização de
+     UX (13/08, seções 49-55 do documento do auditor), Fase C. TODOS os
+     ids de campo (enc-qtd/enc-pct/.../enc-laudo-input/enc-assinatura-
+     input/enc-nc/enc-seguranca-status) continuam EXATAMENTE os mesmos
+     -- calcularPct(), capturarEUpload() e a leitura de campos em
+     confirmarEncerramento() não mudam nada internamente, só qual
+     etapa cada campo mora. -->
+<div id="scr-encerrar" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="encerramentoVoltarEtapa()">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">Encerrar OS</div><div class="hdr-sub" id="enc-id"></div></div>
+  </div>
+  <div class="content">
+    <div style="font-size:11px;color:var(--gray);text-transform:uppercase;font-weight:700;letter-spacing:.5px;margin-bottom:14px" id="enc-etapa-label">Etapa 1 de 6 — Execução</div>
+
+    <!-- ETAPA 1: EXECUÇÃO -->
+    <div id="enc-etapa-1">
+      <div class="form-group"><label class="form-label">Quantidade realizada hoje</label><input class="form-input" type="number" id="enc-qtd" placeholder="0" min="0" oninput="calcularPct()"></div>
+      <div class="form-group">
+        <label class="form-label">% Acumulado da OS completa</label>
+        <div class="pct-display"><span id="enc-pct-num">0</span>%</div>
+        <input type="range" id="enc-pct" min="0" max="100" value="0" oninput="document.getElementById('enc-pct-num').textContent=this.value">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray)"><span>0%</span><span>50%</span><span>100%</span></div>
+      </div>
+      <div class="divider"></div>
+      <div class="form-group"><label class="form-label">Observacoes do campo</label><textarea class="form-textarea" id="enc-obs" placeholder="O que foi feito, pendencias, observacoes..."></textarea></div>
+      <div class="form-group"><label class="form-label">Materiais utilizados</label><input class="form-input" id="enc-materiais" placeholder="Ex: 2m cabo 6mm, 3 terminais..."></div>
+      <div class="form-group"><label class="form-label">Proximo passo</label><input class="form-input" id="enc-proximo" placeholder="Ex: Aguardar entrega, agendar retorno..."></div>
+      <button class="btn btn-green" onclick="encerramentoProximaEtapa()">CONTINUAR</button>
+    </div>
+
+    <!-- ETAPA 2: PENDÊNCIAS -- pré-validação (item 4): mostra o que
+         falta ANTES da última tela, consultando canCloseOS (Frente C,
+         já existe read-only, sem efeito colateral) de forma PROATIVA
+         em vez de só no clique final. Servidor decide, frontend só
+         reflete -- mesmo princípio já seguido no resto do projeto. -->
+    <div id="enc-etapa-2" style="display:none">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">O que falta pra concluir</div>
+        <div id="enc-pendencias-lista" style="margin-top:8px;font-size:14px">Verificando...</div>
+      </div>
+      <button class="btn btn-green" onclick="encerramentoProximaEtapa()">CONTINUAR</button>
+    </div>
+
+    <!-- ETAPA 3: EVIDÊNCIAS -- Laudo/Assinatura, Frente B fatia
+         prioritária, inalterado (capturarEUpload/ids intocados). -->
+    <div id="enc-etapa-3" style="display:none">
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Laudo</div>
+        <input type="file" id="enc-laudo-input" accept="image/*,.pdf" capture="environment" style="margin-top:8px"
+               onchange="capturarEUpload('enc-laudo-input','enc-laudo-status','Laudo_URL')">
+        <div id="enc-laudo-status" style="font-size:12px;color:var(--gray);margin-top:6px">Nenhum laudo enviado ainda</div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Assinatura do cliente</div>
+        <input type="file" id="enc-assinatura-input" accept="image/*" capture="environment" style="margin-top:8px"
+               onchange="capturarEUpload('enc-assinatura-input','enc-assinatura-status','Assinatura_URL')">
+        <div id="enc-assinatura-status" style="font-size:12px;color:var(--gray);margin-top:6px">Nenhuma assinatura enviada ainda</div>
+      </div>
+      <!-- Segurança — Pré-Execução (Frente B fatia 3) continua só
+           leitura, lida da Fase 1 do checklist (CHK3F), não editável
+           aqui. -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">Segurança — Pré-Execução</div>
+        <div style="font-size:11px;color:var(--gray);margin:4px 0 6px">Respondida na Fase 1 do checklist da OS.</div>
+        <div id="enc-seguranca-status" style="font-size:14px;font-weight:700;color:var(--gray)">—</div>
+      </div>
+      <button class="btn btn-green" onclick="encerramentoProximaEtapa()">CONTINUAR</button>
+    </div>
+
+    <!-- ETAPA 4: ACEITE -- confirmação explícita do técnico, distinta
+         da Assinatura (arquivo) da etapa anterior. Gesto obrigatório
+         pra avançar. Não Conformidade mora aqui (mesmo campo/ids de
+         sempre, só reposicionado). -->
+    <div id="enc-etapa-4" style="display:none">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">Confirmação</div>
+        <label style="display:flex;gap:10px;align-items:flex-start;margin-top:10px;cursor:pointer">
+          <input type="checkbox" id="enc-aceite-confirmado" style="margin-top:3px;width:18px;height:18px">
+          <span style="font-size:14px;color:var(--text)">Confirmo que o cliente aceitou o serviço conforme descrito</span>
+        </label>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div><div style="font-size:14px;font-weight:700">Nao conformidade</div><div style="font-size:12px;color:var(--gray);margin-top:2px">Reportar problema detectado</div></div>
+          <label style="position:relative;width:52px;height:28px;cursor:pointer">
+            <input type="checkbox" id="enc-nc" style="opacity:0;position:absolute">
+            <span id="enc-nc-track" style="position:absolute;inset:0;background:var(--bg3);border-radius:14px;border:1px solid var(--border);transition:.2s"></span>
+            <span id="enc-nc-thumb" style="position:absolute;top:3px;left:3px;width:22px;height:22px;background:var(--gray);border-radius:50%;transition:.2s"></span>
+          </label>
+        </div>
+      </div>
+      <button class="btn btn-green" onclick="encerramentoProximaEtapa()">CONTINUAR</button>
+    </div>
+
+    <!-- ETAPA 5: REVISÃO -- recap read-only + última checagem de
+         canCloseOS antes de habilitar o botão final (evita corrida
+         entre a etapa Pendências e chegar aqui). -->
+    <div id="enc-etapa-5" style="display:none">
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Revisão</div>
+        <div id="enc-revisao-resumo" style="margin-top:8px;font-size:13px;color:var(--text2);line-height:1.6"></div>
+      </div>
+      <div id="enc-revisao-bloqueio" class="alert alert-warn" style="display:none;margin-bottom:12px"></div>
+      <button class="btn btn-green" id="enc-btn-concluir" onclick="confirmarEncerramento()">CONCLUIR OS</button>
+    </div>
+
+    <!-- ETAPA 6: CONCLUIR -- resultado final (sucesso ou recusa real,
+         mensagemRecusa-style). Recusa NÃO sai do wizard -- "AJUSTAR"
+         volta pra Pendências, não é só um toast. -->
+    <div id="enc-etapa-6" style="display:none">
+      <div class="card" id="enc-resultado-card" style="text-align:center;padding:28px">
+        <div style="font-size:16px;font-weight:700" id="enc-resultado-titulo"></div>
+        <div style="font-size:14px;color:var(--text2);margin-top:8px" id="enc-resultado-msg"></div>
+      </div>
+      <button class="btn btn-gray" style="margin-top:16px;display:none" id="enc-btn-voltar-home" onclick="carregarHome()">VOLTAR</button>
+      <button class="btn btn-outline" style="margin-top:16px;display:none" id="enc-btn-ajustar" onclick="encerramentoIrParaEtapa(2)">AJUSTAR</button>
+    </div>
+  </div>
+</div>
+
+<!-- TELA 7B: CHECKLIST DA OS (3 fases -- Frente B, fatia 3, Diretriz v1.1) -->
+<div id="scr-checklist" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltarDaChecklist()">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">Checklist da OS</div><div class="hdr-sub" id="chk-progresso">Carregando...</div></div>
+  </div>
+  <div class="content">
+    <div id="chk-loading" class="card" style="text-align:center;padding:32px"><div style="color:var(--gray)">Carregando perguntas...</div></div>
+    <!-- Fase 1 -- Pré-Execução (segurança). Uma pergunta Sim/Não por vez;
+         "Não" bloqueia avançar (mesmo padrão de trava que o resto do
+         checklist usa pra NC) até o item ser resolvido e respondido Sim,
+         porque confirmarSegurancaPreExecucao no backend exige os 4
+         booleans = true pra sequer gravar Estado_Seguranca. -->
+    <div id="chk-f1-block" style="display:none">
+      <div class="hdr-sub" id="chk-f1-titulo" style="margin-bottom:12px;color:var(--text2);font-weight:600"></div>
+      <div class="card" style="margin-bottom:14px">
+        <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:14px" id="chk-f1-texto"></div>
+        <button class="btn btn-green" style="width:100%;margin-bottom:8px" onclick="CHK3F.responder(true)">SIM</button>
+        <button class="btn btn-outline" style="width:100%" onclick="CHK3F.responder(false)">NÃO</button>
+      </div>
+      <div id="chk-f1-alerta" class="alert alert-warn" style="display:none"></div>
+    </div>
+    <div id="chk-pergunta-block" style="display:none">
+      <div class="card" style="border-color:var(--yellow);margin-bottom:16px">
+        <div class="card-title" id="chk-tipo-resp" style="margin-bottom:4px">SELECIONE UMA OPCAO</div>
+        <div style="font-size:18px;font-weight:600;color:var(--text);line-height:1.4" id="chk-texto-perg"></div>
+      </div>
+      <div id="chk-opcoes"></div>
+      <button id="chk-btn-confirmar" class="btn btn-green" style="display:none;margin-top:8px" onclick="confirmarMultipla()">CONFIRMAR SELECAO</button>
+      <div id="chk-foto-aviso" style="display:none;margin-top:12px;padding:12px;background:var(--bg3);border-radius:var(--radius);border:1px solid var(--yellow);color:var(--yellow);font-size:14px">
+        Foto obrigatoria para esta pergunta. Capture a evidencia antes de continuar.
+      </div>
+    </div>
+    <!-- NC (Nao Conformidade): bloqueio real de foto+texto -- mesmo padrao
+         do KM (scr-iniciar-km). Aparece no lugar das opcoes quando a
+         resposta escolhida aciona NC; so avanca com justificativa E foto,
+         e foto ainda nao existe no app (mesma limitacao ja aceita no KM). -->
+    <div id="chk-nc-block" style="display:none">
+      <div class="card" style="border-color:var(--red);margin-bottom:16px">
+        <div style="color:var(--red);font-weight:700;margin-bottom:6px">Nao conformidade — justificativa obrigatoria</div>
+        <div style="color:var(--text2);font-size:14px;line-height:1.4">Resposta selecionada: <b id="chk-nc-resposta"></b></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Justificativa</label>
+        <textarea class="form-textarea" id="chk-nc-justificativa" placeholder="Descreva a nao conformidade..."></textarea>
+      </div>
+      <div class="alert alert-warn" style="margin-bottom:12px">
+        Foto tambem obrigatoria — captura ainda nao disponivel nesta versao do app.
+      </div>
+      <button class="btn btn-green" onclick="confirmarRespostaNC()">CONFIRMAR</button>
+      <button class="btn btn-gray" style="margin-top:8px" onclick="cancelarRespostaNC()">VOLTAR</button>
+    </div>
+    <div id="chk-resumo-block" style="display:none">
+      <div class="card" style="border-color:var(--green);text-align:center;padding:24px;margin-bottom:16px">
+        <div style="font-size:36px;margin-bottom:8px">OK</div>
+        <div style="font-size:18px;font-weight:700;color:var(--green)">Checklist Concluido!</div>
+        <div style="font-size:14px;color:var(--gray);margin-top:4px" id="chk-resumo-qtd"></div>
+      </div>
+      <div id="chk-nc-aviso" style="display:none" class="card" style="border-color:var(--red);padding:14px;margin-bottom:16px">
+        <div style="color:var(--red);font-weight:700;margin-bottom:4px">Nao Conformidade Detectada</div>
+        <div style="color:var(--text2);font-size:13px">Uma ou mais respostas indicam nao conformidade. Registre no encerramento da OS.</div>
+      </div>
+      <button class="btn btn-green" onclick="concluirChecklist()">VOLTAR PARA OS</button>
+    </div>
+    <div id="chk-v2-erro-versao" style="display:none">
+      <div class="card" style="border-color:var(--red);padding:16px">
+        <div style="color:var(--red);font-weight:700;margin-bottom:6px">Aplicativo desatualizado</div>
+        <div style="color:var(--text2);font-size:14px;line-height:1.4" id="chk-v2-erro-msg"></div>
+      </div>
+    </div>
+    <div id="chk-v2-block" style="display:none">
+      <div class="hdr-sub" id="chk-v2-fase-titulo" style="margin-bottom:12px;color:var(--text2);font-weight:600"></div>
+      <div id="chk-v2-perguntas"></div>
+      <button class="btn btn-green" id="chk-v2-btn-avancar" style="margin-top:8px" onclick="CHKV2.tentarAvancarFase()">PRÓXIMA FASE</button>
+    </div>
+  </div>
+</div>
+
+<!-- TELA 8: RESUMO DO DIA -->
+<div id="scr-resumo" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-home')">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">Resumo do Dia</div><div class="hdr-sub" id="resumo-sub"></div></div>
+  </div>
+  <div class="content">
+    <div id="resumo-vazio" style="display:none" class="card" style="text-align:center;padding:32px"><div style="color:var(--gray)">Nenhuma OS encerrada hoje</div></div>
+    <div id="resumo-dados">
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-val" id="res-horas">0h00</div><div class="stat-lbl">Prod.</div></div>
+        <div class="stat-box"><div class="stat-val" id="res-os">0</div><div class="stat-lbl">OS</div></div>
+        <div class="stat-box"><div class="stat-val" id="res-pauses">0</div><div class="stat-lbl">Pausas</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Horario</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><div style="font-size:12px;color:var(--gray)">Entrada</div><div style="font-size:22px;font-weight:800;color:var(--text)" id="res-entrada">--:--</div></div>
+          <div style="color:var(--gray);font-size:24px">&#8594;</div>
+          <div style="text-align:right"><div style="font-size:12px;color:var(--gray)">Ultima OS</div><div style="font-size:22px;font-weight:800;color:var(--text)" id="res-saida">--:--</div></div>
+        </div>
+      </div>
+      <div class="card"><div class="card-title">Clientes atendidos</div><div id="res-clientes" style="font-size:14px;color:var(--text2)"></div></div>
+      <div class="card"><div class="card-title">Status do dia</div><div class="card-value" id="res-status" style="font-size:16px;color:var(--green)"></div></div>
+      <div id="resumo-km-block" style="display:none">
+        <div class="divider"></div>
+        <div class="card" style="border-color:var(--yellow)">
+          <div class="card-title" style="color:var(--yellow)">KM Final do dia</div>
+          <div class="form-group" style="margin-bottom:8px"><label class="form-label">Odometro agora</label><input class="form-input" type="number" id="resumo-km-final" placeholder="Ex: 12520" inputmode="numeric" min="0" step="1"></div>
+          <button class="btn btn-yellow btn-sm" onclick="confirmarFimDia()">REGISTRAR KM E ENCERRAR DIA</button>
+        </div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <button class="btn btn-gray btn-sm" onclick="logOut()">Sair</button>
+  </div>
+</div>
+
+<!-- TELA KM: KM DO ODOMETRO (por-OS, aditiva) -->
+<div id="scr-iniciar-km" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltar('scr-home')">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">KM do Odometro</div><div class="hdr-sub" id="iniciar-km-cliente"></div></div>
+  </div>
+  <div class="content">
+    <div class="form-group">
+      <label class="form-label">KM atual do odometro</label>
+      <input class="form-input" type="number" id="iniciar-km-input" placeholder="Ex: 12480" inputmode="numeric" min="0" step="1">
+    </div>
+    <div id="iniciar-km-desvio-bloco" style="display:none">
+      <div class="alert alert-warn" id="iniciar-km-desvio-msg" style="margin-bottom:12px"></div>
+      <div class="form-group">
+        <label class="form-label">Justificativa</label>
+        <textarea class="form-textarea" id="iniciar-km-justificativa" placeholder="Explique o desvio de rota..."></textarea>
+      </div>
+      <!-- Frente B, fatia 4 (Diretriz v1.1) -- antes disto era um alerta
+           dizendo que a foto era obrigatoria mas nao capturavel, o que
+           bloqueava PERMANENTEMENTE qualquer desvio real de KM (achado
+           documentado no proprio backend, Codigo.js:1661-1662). Reusa a
+           mesma infra generica de upload da Frente B fatia 1
+           (capturarEUpload/POST no-cors/consultarStatusOperacao). -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Foto do odômetro</div>
+        <input type="file" id="km-desvio-foto-input" accept="image/*" capture="environment" style="margin-top:8px" onchange="capturarFotoDesvioKM()">
+        <div id="km-desvio-foto-status" style="font-size:12px;color:var(--gray);margin-top:6px">Nenhuma foto enviada ainda</div>
+      </div>
+    </div>
+    <button class="btn btn-green" onclick="confirmarKMInicial()">CONFIRMAR E INICIAR OS</button>
+  </div>
+</div>
+
+<!-- TELA 9: MEU VEICULO -->
+<div id="scr-meu-veiculo" class="screen">
+  <div class="hdr">
+    <button class="hdr-back" onclick="voltarMeuVeiculo()">&#8249;</button>
+    <div style="flex:1"><div class="hdr-title">Meu Veiculo</div><div class="hdr-sub" id="veiculo-sub">Autocadastro</div></div>
+  </div>
+  <div class="content">
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">STATUS DO CADASTRO</div>
+      <div id="veiculo-status-badge" style="margin-top:6px"><span class="status-badge badge-neutro">Carregando...</span></div>
+      <div id="veiculo-status-msg" style="font-size:13px;color:var(--text2);margin-top:10px;display:none"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Tipo de veiculo</label>
+      <select class="form-select" id="veiculo-tipo">
+        <option value="Carro proprio">Carro proprio</option>
+        <option value="Moto propria">Moto propria</option>
+        <option value="Caminhonete propria">Caminhonete propria</option>
+        <option value="Outros">Outros</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Placa</label><input class="form-input" id="veiculo-placa" placeholder="Ex: ABC-1234" maxlength="10" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
+    <div class="form-group"><label class="form-label">Modelo</label><input class="form-input" id="veiculo-modelo" placeholder="Ex: Gol 2019, Honda CG 160..."></div>
+    <button class="btn btn-green" onclick="salvarVeiculo()">SALVAR VEICULO</button>
+    <div id="veiculo-aviso-aprovado" style="display:none" class="alert"><span>OK</span><div id="veiculo-aviso-texto" style="font-size:13px"></div></div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// PONTE COM O BACKEND — substitui google.script.run
+// ================================================================
+// Cole aqui a URL do Web App do Apps Script (Implantar > Nova
+// implantação > Tipo: App da Web > Executar como: Eu > Acesso:
+// Qualquer pessoa). Deve terminar em /exec
+const API_URL = 'https://script.google.com/macros/s/AKfycbxW8BIFe5F1suLDK0OviEojDrFQFCHjw7lZ32pCgA4fDSZCgynsfABKso0KnTx2ZJ5xCQ/exec';
+
+// Build ID (Seção 30) + contrato de API esperado (Seção 19) -- ver
+// CONTRATO-BACKEND-FIELD-API-CONTRACT.md. APP_BUILD_COMMIT é atualizado
+// manualmente logo após cada commit funcional (identifica o commit
+// funcional mais recente -- pode ficar 1 commit "atrasado" só quando o
+// próprio commit que atualiza esta linha vem depois, nunca aponta pra
+// código errado).
+const APP_BUILD_VERSAO = '1.2.0';
+const APP_BUILD_COMMIT = 'e56e694';
+const APP_BUILD_DATA = '2026-08-14';
+// Contrato que ESTE frontend espera do backend. Só vira bloqueio quando
+// o backend RESPONDE com um valor diferente deste -- backend antigo
+// (ainda sem a action getFieldApiContract) não tem esse campo na
+// resposta, e isso NÃO é tratado como incompatibilidade (fail-open
+// deliberado, ver verificarContratoAPI).
+const FIELD_API_CONTRACT_ESPERADO = 'v1';
+
+// ================================================================
+// OUTBOX COM MÁQUINA DE ESTADOS — Frente D (Diretriz v1.1)
+// ================================================================
+// LOCAL_PENDING -> QUEUED -> SENDING -> RECEIVED -> SYNCED (-> RECONCILED)
+//                                            \-> SYNC_ERROR (retry com backoff, NAO trava a fila)
+//                                            \-> DIVERGENT   (recusa de regra de negocio — nao reexecuta sozinho)
+//
+// Cada item carrega um operationId (UUID) ESTÁVEL: o MESMO id em toda
+// tentativa de reenvio (ao vivo ou via fila), pra o backend
+// (executarIdempotente em Código.js) conseguir dedupar de verdade em
+// vez de reexecutar a operação a cada retry.
+const DB_NAME = 'eletrium_offline';
+const STORE_NAME = 'fila_sync';
+const DB_VERSION = 2; // v1 nao tinha operationId/status — upgrade tratado abaixo
+let dbPromise = null;
+
+function gerarOperationId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  // Fallback pra navegadores sem crypto.randomUUID (Android WebView
+  // mais antigo ainda existe em campo) — v4 aproximado; uso aqui é
+  // identidade de operação, não criptográfico.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+// dispositivoId: identidade estável do aparelho/instalação (não do
+// técnico — um técnico pode logar em mais de um device). Persistido
+// em localStorage, gerado uma vez.
+function obterDispositivoId() {
+  let id = localStorage.getItem('eletrium_dispositivo_id');
+  if (!id) { id = gerarOperationId(); localStorage.setItem('eletrium_dispositivo_id', id); }
+  return id;
+}
+
+function abrirDB() {
+  if (dbPromise) return dbPromise;
+  // D7-08: gsCallIdempotente agora chama registrarIntencaoLocal ANTES
+  // de toda tentativa ao vivo (não só no catch offline) -- se
+  // IndexedDB genuinamente não existir no ambiente (não deveria
+  // acontecer num navegador real, mas indexedDB.open() lançaria
+  // TypeError síncrono aqui dentro, rejeitando a Promise pra sempre em
+  // vez de degradar como o resto desta função já faz via onerror/
+  // onblocked), o app inteiro pararia de funcionar. Degrada pro mesmo
+  // "sem outbox disponível" que os outros caminhos de falha já tratam.
+  if (typeof indexedDB === 'undefined' || !indexedDB) { dbPromise = Promise.resolve(null); return dbPromise; }
+  dbPromise = new Promise((resolve) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (ev) => {
+      const db = req.result;
+      const store = db.objectStoreNames.contains(STORE_NAME)
+        ? req.transaction.objectStore(STORE_NAME)
+        : db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+      if (!store.indexNames.contains('operationId')) store.createIndex('operationId', 'operationId', { unique: true });
+      if (!store.indexNames.contains('status')) store.createIndex('status', 'status', { unique: false });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+    req.onblocked = () => resolve(null);
+  });
+  return dbPromise;
+}
+
+// D7-08 (achado Cowork 2, INVESTIGACAO-D6-08-D7-08-OUTBOX-COWORK2.md,
+// commit ce65dec): virou UPSERT. Antes, o comentário desta função dizia
+// "a transição LOCAL_PENDING é o instante anterior a esta chamada" --
+// só que esse instante existia SÓ numa variável JS em memória, nunca
+// persistido; se o app morresse ali, o operationId desaparecia sem
+// rastro (útil pro backend nunca saber que o cliente esqueceu). Agora
+// LOCAL_PENDING é gravado de verdade (ver registrarIntencaoLocal,
+// chamada por gsCallIdempotente ANTES da tentativa ao vivo) -- esta
+// função, quando chamada depois (catch de rede, ou capturarEUpload),
+// TRANSICIONA o registro já existente pro status pedido em vez de
+// tentar criar um 2º (o índice `operationId` é único; um add()
+// duplicado lançaria erro). Sem registro prévio (chamadores antigos,
+// ou enfileirarChamada abaixo), cria um novo -- comportamento igual
+// a antes.
+async function enfileirarChamadaComId(operationId, action, params, tipoOperacao, osId, status) {
+  const agora = Date.now();
+  status = status || 'QUEUED';
+  const existente = await buscarItemPorOperationId(operationId);
+  if (existente) {
+    await atualizarItemFila(existente.id, {
+      status, action, params, tipoOperacao: tipoOperacao || '', osId: osId || '',
+      proximaTentativaEm: agora,
+    });
+    return { operationId, enfileirado: true };
+  }
+  const item = {
+    operationId, action, params, tipoOperacao: tipoOperacao || '', osId: osId || '',
+    status, tentativas: 0,
+    criadoEm: agora, enviadoEm: null, recebidoEm: null, sincronizadoEm: null,
+    proximaTentativaEm: agora, erroDetalhe: null,
+  };
+  const db = await abrirDB();
+  if (!db) return { operationId, enfileirado: false };
+  await new Promise((resolve) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).add(item);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
+  return { operationId, enfileirado: true };
+}
+
+// Mantido pra chamadores antigos que ainda não migraram pro operationId
+// estável gerado ANTES da tentativa ao vivo (gsCallIdempotente) — gera
+// o id aqui dentro, só no momento de enfileirar.
+async function enfileirarChamada(action, params, tipoOperacao, osId) {
+  return enfileirarChamadaComId(gerarOperationId(), action, params, tipoOperacao, osId);
+}
+
+// D7-08: persiste a INTENÇÃO em IndexedDB ANTES de qualquer tentativa
+// ao vivo -- ver gsCallIdempotente (chamador principal) e
+// reconciliarIntencoesOrfas (quem resolve o que sobra de uma sessão
+// que morreu no meio do caminho).
+async function registrarIntencaoLocal(operationId, action, params, tipoOperacao, osId) {
+  return enfileirarChamadaComId(operationId, action, params, tipoOperacao, osId, 'LOCAL_PENDING');
+}
+
+async function listarFila() {
+  const db = await abrirDB();
+  if (!db) return [];
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => resolve([]);
+  });
+}
+
+// Índice `operationId` é único (abrirDB), mas a busca aqui é via
+// getAll()+filter (não store.index().get()) de propósito -- mantém o
+// mesmo conjunto mínimo de primitivos IndexedDB que o resto deste
+// arquivo já usa (get/put/add/delete/getAll por chave primária), sem
+// precisar de um fake de índice mais completo só pros testes. O
+// outbox é sempre pequeno (poucos itens pendentes por vez), então
+// O(n) aqui não é um problema real.
+async function buscarItemPorOperationId(operationId) {
+  const fila = await listarFila();
+  return fila.find(i => i.operationId === operationId) || null;
+}
+
+async function removerItemPorOperationId(operationId) {
+  const item = await buscarItemPorOperationId(operationId);
+  if (item) await removerItemFila(item.id);
+}
+
+async function atualizarItemFila(id, patch) {
+  const db = await abrirDB();
+  if (!db) return;
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.get(id);
+    req.onsuccess = () => {
+      const atual = req.result;
+      if (!atual) return resolve();
+      store.put(Object.assign(atual, patch));
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
+}
+
+async function removerItemFila(id) {
+  const db = await abrirDB();
+  if (!db) return;
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
+}
+
+// Backoff exponencial por item: 5s, 15s, 45s, 2min, 5min (teto).
+const BACKOFF_DEGRAUS_MS = [5000, 15000, 45000, 120000, 300000];
+function proximoBackoffMs(tentativas) {
+  return BACKOFF_DEGRAUS_MS[Math.min(tentativas, BACKOFF_DEGRAUS_MS.length - 1)];
+}
+
+// Processa CADA ITEM de forma independente — um item travado em erro
+// não trava mais os outros atrás dele na fila (o `break` antigo fazia
+// exatamente isso de errado) — e respeita o backoff por item.
+//
+// Detecção de recusa migrada pro CONTRATO CANÔNICO do backend
+// (docs/CONTRATO-FRONTEND-ENVELOPE-RECUSA.md, achado desta mesma
+// sessão na revisão de integração da Frente B): a versão antiga só
+// reconhecia recusa quando a resposta tinha `blockingReasons`, um
+// formato exclusivo de `canCloseOS`/`encerrarOS` — qualquer outra
+// função de escrita que recusasse (KM, checklist, ferramental,
+// oferta, ...) passava batido pela checagem, e o item de que TRATA
+// esta função era marcado SYNCED e removido da fila em silêncio,
+// mesmo tendo sido recusado pelo backend de verdade. Agora toda
+// função de escrita crítica devolve os mesmos 6 campos
+// (success/status/operation_id/error_code/retryable/blocking_reasons)
+// — a checagem passa a ser `success===false`, e `retryable` decide se
+// é falha transitória (mesmo tratamento de erro de rede, backoff e
+// tenta de novo sozinho) ou recusa de regra de negócio (DIVERGENT,
+// precisa de ação humana, nunca retry automático).
+async function processarFilaOffline() {
+  const fila = await listarFila();
+  const agora = Date.now();
+  for (const item of fila) {
+    // LOCAL_PENDING/LOCAL_PENDING_UPLOAD são intenções ainda não
+    // confirmadas como abandonadas -- reenviar cego aqui seria
+    // exatamente o duplo-submit que D7-08 descreve (a tentativa ao
+    // vivo original pode estar genuinamente em voo agora mesmo, na
+    // MESMA sessão). Só reconciliarIntencoesOrfas/reconciliarUploadsOrfaos
+    // (chamadas no boot) decidem o que fazer com elas.
+    if (item.status === 'SYNCED' || item.status === 'RECONCILED' || item.status === 'DIVERGENT'
+      || item.status === 'LOCAL_PENDING' || item.status === 'LOCAL_PENDING_UPLOAD') continue;
+    if (item.proximaTentativaEm && item.proximaTentativaEm > agora) continue; // ainda no backoff
+
+    await atualizarItemFila(item.id, { status: 'SENDING', enviadoEm: Date.now() });
+    try {
+      const resultado = await gsCallReal(item.action, item.params);
+      await atualizarItemFila(item.id, { status: 'RECEIVED', recebidoEm: Date.now() });
+
+      if (resultado && resultado.success === false) {
+        if (resultado.retryable) {
+          // Falha TRANSITÓRIA do lado do servidor (lock ocupado, erro
+          // do Sheets) -- mesmo tratamento de falha de rede: backoff
+          // por item, tenta de novo sozinho.
+          const tentativas = (item.tentativas || 0) + 1;
+          await atualizarItemFila(item.id, {
+            status: 'SYNC_ERROR', tentativas,
+            proximaTentativaEm: Date.now() + proximoBackoffMs(tentativas),
+            erroDetalhe: JSON.stringify(resultado.blocking_reasons || [resultado.erro || 'Erro transitorio']),
+          });
+          continue;
+        }
+        // Recusa de REGRA DE NEGÓCIO -- não é erro de rede, retentar
+        // sozinho não resolve; precisa de ação humana. DIVERGENT.
+        await atualizarItemFila(item.id, { status: 'DIVERGENT', erroDetalhe: JSON.stringify(resultado.blocking_reasons || [resultado.erro || 'Recusado pelo backend']) });
+        continue;
+      }
+
+      await atualizarItemFila(item.id, { status: 'SYNCED', sincronizadoEm: Date.now() });
+      await removerItemFila(item.id); // fila só guarda pendente; SYNCED sai (Log_Central do backend é o histórico)
+    } catch (err) {
+      const tentativas = (item.tentativas || 0) + 1;
+      await atualizarItemFila(item.id, {
+        status: 'SYNC_ERROR', tentativas,
+        proximaTentativaEm: Date.now() + proximoBackoffMs(tentativas),
+        erroDetalhe: String((err && err.message) || err),
+      });
+      // sem break — continua pros próximos itens da fila.
+    }
+  }
+}
+
+// ================================================================
+// D7-08 — RECONCILIAÇÃO DE INTENÇÕES ÓRFÃS NO BOOT
+// (INVESTIGACAO-D6-08-D7-08-OUTBOX-COWORK2.md, commit ce65dec)
+// ================================================================
+// Roda no boot, ANTES de processarFilaOffline() tentar qualquer coisa
+// nova -- LOCAL_PENDING sobrevivente de uma sessão anterior que morreu
+// entre gerarOperationId() e o catch de gsCallIdempotente (aba
+// fechada, processo morto, bateria acabou). Em vez de deixar o app
+// reenviar cego com um operationId NOVO na próxima tentativa (duplo
+// submit real em funções sem guarda própria -- salvarResposta,
+// registrarMovimentoFerramental), pergunta ao servidor se ele já
+// processou (consultarStatusOperacao, leitura pública, sem posse) --
+// mesmo primitivo que o backend já usa internamente (grava
+// LOCAL_PENDING ANTES de rodar fn(), não depois).
+async function reconciliarIntencoesOrfas() {
+  const fila = await listarFila();
+  const orfas = fila.filter(i => i.status === 'LOCAL_PENDING');
+  for (const item of orfas) {
+    let resposta = null;
+    try {
+      resposta = await gsCallReal('consultarStatusOperacao', [item.operationId]);
+    } catch (e) {
+      resposta = null; // sem sinal agora -- trata como nao resolvido, tenta de novo mais tarde
+    }
+    if (resposta && resposta.encontrado && resposta.resultado) {
+      // Servidor já processou antes do app morrer -- nada a reenviar.
+      await removerItemFila(item.id);
+    } else {
+      // Nunca chegou a processar (ou sem sinal pra confirmar agora) --
+      // promove pra QUEUED com o MESMO operationId; processarFilaOffline()
+      // cuida do resto, sem duplicar (é exatamente o que D7-08 pedia).
+      await atualizarItemFila(item.id, { status: 'QUEUED', proximaTentativaEm: 0 });
+    }
+  }
+}
+
+// Achado ADJACENTE de D7-08: capturarEUpload tem o mesmo buraco (o
+// operationId do upload também só vivia numa variável local). Aqui a
+// reconciliação NUNCA promove pra QUEUED -- não há base64 persistido
+// pra reenviar (de propósito, pra não inchar o IndexedDB com arquivos
+// binários) -- só confirma o desfecho com o servidor e informa o
+// técnico via toast, em vez de deixar a dúvida pra sempre.
+async function reconciliarUploadsOrfaos() {
+  const fila = await listarFila();
+  const orfas = fila.filter(i => i.status === 'LOCAL_PENDING_UPLOAD');
+  for (const item of orfas) {
+    let resposta = null;
+    try {
+      resposta = await gsCallReal('consultarStatusOperacao', [item.operationId]);
+    } catch (e) {
+      resposta = null;
+    }
+    await removerItemFila(item.id); // marcador nunca é retentável -- sempre limpa
+    const campo = (item.params && item.params[2]) || 'arquivo';
+    if (resposta && resposta.encontrado && resposta.resultado && resposta.resultado.success === true) {
+      toast('Confirmado: um envio anterior (' + campo + ') foi concluido com sucesso.');
+    } else if (resposta && resposta.encontrado && resposta.resultado && resposta.resultado.success === false) {
+      toast('Um envio anterior (' + campo + ') foi recusado -- pode ser necessario reenviar.', true);
+    } else {
+      toast('Nao foi possivel confirmar um envio anterior (' + campo + ') -- verifique e reenvie se necessario.', true);
+    }
+  }
+}
+
+// ================================================================
+// STATUS DE SINCRONIZAÇÃO HUMANIZADO — reorganização de UX (13/08,
+// seções 49-55 do documento do auditor)
+// ================================================================
+// O técnico nunca deveria ver LOCAL_PENDING/QUEUED/SYNC_ERROR crus --
+// esses são vocabulário interno do outbox (D7-02: namespace PRÓPRIO,
+// diferente do status do Log_Central). resumoFila() traduz o estado
+// real da fila pra 3 situações que fazem sentido em campo.
+async function resumoFila() {
+  const fila = await listarFila();
+  const divergentes = fila.filter(i => i.status === 'DIVERGENT');
+  const pendentes = fila.filter(i => i.status !== 'DIVERGENT'); // QUEUED/SENDING/RECEIVED/SYNC_ERROR -- ainda tentando, retry automático já cobre
+  if (!divergentes.length && !pendentes.length) return { estado: 'sincronizado' };
+  if (divergentes.length) return { estado: 'divergente', n: divergentes.length, nPendentes: pendentes.length };
+  return { estado: 'pendente', n: pendentes.length };
+}
+
+function renderStatusSincronizacao(elId) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  resumoFila().then(r => {
+    if (r.estado === 'sincronizado') {
+      el.innerHTML = '<div style="font-size:13px;color:var(--green)">Tudo sincronizado</div>';
+      return;
+    }
+    if (r.estado === 'pendente') {
+      el.innerHTML =
+        '<div style="font-size:13px;color:var(--yellow)">' + r.n + ' registro' + (r.n > 1 ? 's' : '') + ' aguardando envio</div>' +
+        '<div style="font-size:11px;color:var(--gray);margin-top:2px">Seus dados permanecem salvos neste aparelho</div>';
+      return;
+    }
+    // divergente -- precisa de ação humana (não é erro de rede, o
+    // backend recusou por regra de negócio -- ver mensagemRecusa/
+    // motivosRecusa, mesmo padrão da auditoria de mensagens)
+    el.innerHTML =
+      '<div style="font-size:13px;color:var(--red)">Não foi possível enviar ' + r.n + ' registro' + (r.n > 1 ? 's' : '') + '</div>' +
+      (r.nPendentes ? '<div style="font-size:11px;color:var(--yellow);margin-top:2px">' + r.nPendentes + ' outro(s) ainda aguardando envio</div>' : '') +
+      '<div style="font-size:11px;color:var(--gray);margin-top:2px">Seus dados permanecem salvos neste aparelho</div>' +
+      '<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="tentarNovamenteDivergentes()">TENTAR NOVAMENTE</button>';
+  });
+}
+
+// tentarNovamenteDivergentes -- GERA operationId NOVO por item (achado
+// do dono, mesma classe do bug já confirmado sobre retry de SYNC_ERROR
+// genuíno): todo item DIVERGENT tem resultado_json preenchido (é assim
+// que a recusa foi cacheada) -- o contrato de idempotência já testado
+// (T-LOG-09) bloqueia reexecução de fn() pro MESMO operationId e
+// devolve a mesma recusa cacheada de novo, sem rodar fn() outra vez.
+// Reusar o operationId faria o botão "Tentar novamente" parecer
+// funcionar (o toast mudaria) sem NUNCA reprocessar nada de verdade.
+//
+// O operationId antigo é procurado dentro de item.params POR VALOR
+// (não por posição -- cada action embute operationId numa posição
+// posicional diferente, gsCallIdempotente já documenta isso) e trocado
+// pelo novo. Itens enfileirados via gsCall simples (sem
+// gsCallIdempotente) nunca tiveram operationId embutido em params --
+// a troca não encontra nada e não faz nada (no-op seguro: esses itens
+// não passam pela trava de dedupe pra começo de conversa, já que
+// executarIdempotente(undefined, ...) roda fn() direto).
+async function tentarNovamenteDivergentes() {
+  const fila = await listarFila();
+  const divergentes = fila.filter(i => i.status === 'DIVERGENT');
+  for (const item of divergentes) {
+    const operationIdAntigo = item.operationId;
+    const operationIdNovo = gerarOperationId();
+    const novosParams = Array.isArray(item.params)
+      ? item.params.map(p => (p === operationIdAntigo ? operationIdNovo : p))
+      : item.params;
+    await atualizarItemFila(item.id, {
+      operationId: operationIdNovo,
+      params: novosParams,
+      status: 'QUEUED',
+      tentativas: 0,
+      proximaTentativaEm: 0,
+      erroDetalhe: null,
+    });
+  }
+  await processarFilaOffline();
+}
+
+// JSONP: o Apps Script não devolve cabeçalho de CORS nas
+// respostas, então fetch() de outro domínio é bloqueado pelo
+// navegador mesmo quando o servidor responde com sucesso. Uma
+// tag <script> comum não sofre esse bloqueio — por isso usamos
+// esse formato em vez de fetch() para falar com o Apps Script.
+let jsonpContador = 0;
+function gsCallReal(action, params) {
+  return new Promise((resolve, reject) => {
+    const nomeCallback = 'gsCallback_' + (jsonpContador++);
+    const script = document.createElement('script');
+    let finalizado = false;
+
+    const limpar = () => {
+      delete window[nomeCallback];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      clearTimeout(timeoutId);
+    };
+
+    window[nomeCallback] = (data) => {
+      if (finalizado) return;
+      finalizado = true;
+      limpar();
+      resolve(data);
+    };
+
+    script.onerror = () => {
+      if (finalizado) return;
+      finalizado = true;
+      limpar();
+      reject(new Error('Falha de rede (JSONP)'));
+    };
+
+    const timeoutId = setTimeout(() => {
+      if (finalizado) return;
+      finalizado = true;
+      limpar();
+      reject(new Error('Tempo esgotado'));
+    }, 6000);
+
+    const url = API_URL +
+      '?action=' + encodeURIComponent(action) +
+      '&params=' + encodeURIComponent(JSON.stringify(params || [])) +
+      '&callback=' + nomeCallback;
+    script.src = url;
+    document.body.appendChild(script);
+  });
+}
+
+// Chamada "principal": tenta na hora. Se falhar (sem sinal),
+// enfileira no IndexedDB para sincronizar depois.
+function gsCall(action, params, opts) {
+  opts = opts || {};
+  return gsCallReal(action, params).catch(err => {
+    if (opts.enfileiravelSeOffline) {
+      enfileirarChamada(action, params, opts.tipoOperacao, opts.osId);
+      return { sucesso: true, offline: true };
+    }
+    throw err;
+  });
+}
+
+// gsCallIdempotente — Frente D (Diretriz v1.1): pra operações críticas
+// (checklist, fotos, aceite, KM, apontamentos, assinatura, medição,
+// conclusão). Gera o operationId ANTES da 1a tentativa ao vivo (não só
+// no fallback offline) — se a tentativa ao vivo falhar por timeout
+// DEPOIS de o servidor já ter processado, o retry (ao vivo de novo ou
+// via fila) usa o MESMO operationId e o backend não reexecuta.
+//
+// `montarParams(operationId, dispositivoId)` é uma função porque cada
+// action tem uma assinatura posicional diferente — quem chama decide
+// EM QUE POSIÇÃO operationId/dispositivoId entram pra aquela action
+// especificamente (backend espera eles nas 2 últimas posições, mas a
+// posição exata varia com o número de parâmetros de cada função).
+//
+// D7-08 (achado Cowork 2, INVESTIGACAO-D6-08-D7-08-OUTBOX-COWORK2.md,
+// commit ce65dec): até aqui, "gerar ANTES da tentativa ao vivo" só
+// valia pra memória JS -- o operationId não sobrevivia a um app que
+// morresse entre a geração e o catch (aba fechada, processo morto).
+// Agora persiste em IndexedDB (registrarIntencaoLocal) ANTES do
+// gsCallReal -- reconciliarIntencoesOrfas() resolve no próximo boot o
+// que sobrar de uma sessão que morreu no meio do caminho.
+async function gsCallIdempotente(action, montarParams, opts) {
+  opts = opts || {};
+  const operationId = gerarOperationId();
+  const dispositivoId = obterDispositivoId();
+  const params = montarParams(operationId, dispositivoId);
+  await registrarIntencaoLocal(operationId, action, params, opts.tipoOperacao, opts.osId);
+  try {
+    const resultado = await gsCallReal(action, params);
+    await removerItemPorOperationId(operationId); // resolvido ao vivo -- nada pra reconciliar depois
+    return Object.assign({ operationId }, resultado);
+  } catch (err) {
+    if (opts.enfileiravelSeOffline) {
+      await enfileirarChamadaComId(operationId, action, params, opts.tipoOperacao, opts.osId); // transiciona LOCAL_PENDING -> QUEUED
+      return { sucesso: true, offline: true, operationId };
+    }
+    // Sem contrato de retry offline pra esta chamada -- não há fila
+    // pra reenviar depois, então não há por que manter o registro.
+    await removerItemPorOperationId(operationId);
+    throw err;
+  }
+}
+
+// ================================================================
+// UPLOAD DE ARQUIVOS (Laudo/Assinatura) — Frente B, fatia prioritária
+// ================================================================
+// Base64 de foto/PDF estoura de longe o limite de tamanho de URL do
+// JSONP (GET) — por isso upload usa POST. O Apps Script não devolve
+// cabeçalho de CORS, então fetch() normal pra outro domínio (GitHub
+// Pages -> script.google.com) é bloqueado NA LEITURA da resposta —
+// mas mode:'no-cors' ainda ENVIA a requisição de verdade (só não deixa
+// ler o corpo de volta, resposta "opaque"). O servidor processa
+// normalmente; a confirmação vem de um POLL separado via
+// consultarStatusOperacao (GET/JSONP normal, sem essa restrição).
+// Genérico — qualquer action que precise mandar payload grande demais
+// pro limite de URL do JSONP (base64 de foto/PDF) usa isto.
+async function enviarPOSTNoCors(action, params) {
+  await fetch(API_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    // text/plain evita o preflight OPTIONS (Apps Script não responde
+    // preflight de CORS) — application/json dispararia um preflight
+    // que o servidor não sabe responder e a requisição nunca sairia.
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action, params }),
+  });
+}
+
+// Achado (Cowork 2, mesma classe do gap ja corrigido em
+// processarFilaOffline): o backend mudou o terminal de sucesso do
+// Log_Central de SYNCED pra QUEUED (SYNCED/RECONCILED agora sao
+// exclusivos de confirmacao real pelo 1A -- ver comentario de
+// _sucesso() em Código.js). Checar r.status==='SYNCED' aqui nunca mais
+// bateria num upload bem-sucedido -- o poll estouraria tentativasMax e
+// devolveria TIMEOUT mesmo pro caso feliz. `resultado_json` (r.resultado)
+// e o sinal real de "operacao concluida" -- Código.js grava ele ANTES
+// de status/sincronizado_em (ordem de escrita deliberada, pra reduzir
+// a janela de inconsistencia) -- entao a presenca de r.resultado por si
+// so ja significa "fn() terminou, sucesso ou falha". Generaliza igual o
+// fix de processarFilaOffline: confia no envelope, nao num valor de
+// status especifico.
+async function pollStatusOperacao(operationId, tentativasMax) {
+  tentativasMax = tentativasMax || 15; // ~30s com 2s de intervalo — folga generosa pro Drive processar
+  for (let i = 0; i < tentativasMax; i++) {
+    const r = await gsCallReal('consultarStatusOperacao', [operationId]).catch(() => null);
+    if (r && r.encontrado && r.resultado) return r;
+    await new Promise(res => setTimeout(res, 2000));
+  }
+  return { encontrado: false, status: 'TIMEOUT' };
+}
+
+function lerArquivoComoBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// Compõe uma mensagem de recusa a partir do envelope canônico -- mesmo
+// padrão que já funcionava bem em confirmarEncerramento (lê
+// blocking_reasons de verdade, não um texto fixo tipo "tente
+// novamente" pra toda recusa). Achado da auditoria de mensagens
+// (12/08): upload era a única área que descartava blocking_reasons/
+// erro completamente. `retryable` distingue "vale a pena tentar de
+// novo" (falha transitória) de "não adianta tentar sem mudar algo"
+// (recusa de regra de negócio) --framing diferente pro técnico.
+// motivosRecusa: só o(s) motivo(s), sem framing de verbo -- usado onde
+// a tela já tem um título próprio (ex. mostrarStatusOferta) e só
+// precisa do texto do motivo. mensagemRecusa: motivosRecusa + framing
+// "Falha ao X (tente novamente)" / "Não foi possível X", pra toast de
+// uma linha só (upload, ferramental, KM).
+function motivosRecusa(r) {
+  return (r && Array.isArray(r.blocking_reasons) && r.blocking_reasons.length)
+    ? r.blocking_reasons.join('; ')
+    : ((r && r.erro) || 'motivo não informado');
+}
+function mensagemRecusa(r, verbo) {
+  verbo = verbo || 'enviar';
+  const motivos = motivosRecusa(r);
+  return (r && r.retryable) ? ('Falha ao ' + verbo + ' (tente novamente): ' + motivos) : ('Não foi possível ' + verbo + ': ' + motivos);
+}
+
+// osIdOverride/onSucesso são opcionais (Frente B, fatia 4) -- Laudo/
+// Assinatura continuam chamando só com os 3 primeiros args, então caem
+// no mesmo comportamento de antes (osId de APP.osAtiva/osPausada, sem
+// callback). Precisa do override pra KM: a tela de foto de desvio pode
+// rodar ANTES da OS existir em osAtiva (iniciar OS nova) ou depois dela
+// já ter saído de lá (KM final de OS já concluída) -- ver capturarFotoDesvioKM.
+async function capturarEUpload(inputId, statusId, campo, osIdOverride, onSucesso) {
+  const input = document.getElementById(inputId);
+  const statusEl = document.getElementById(statusId);
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const os = APP.osAtiva || APP.osPausada;
+  const osId = osIdOverride || (os && os.id);
+  if (!osId) { statusEl.textContent = 'Nenhuma OS ativa'; return; }
+
+  // Achado da varredura de TOCTOU (14/08): diferente dos botões de ação
+  // crítica (que travam implicitamente via showLoading()+overlay
+  // full-screen), este upload só mudava o texto do status -- o input
+  // de arquivo continuava clicável durante o envio, permitindo
+  // reenviar (foto diferente ou a mesma) enquanto o 1º envio ainda
+  // está em voo. Cada envio gera um operationId novo (gerarOperationId
+  // roda por chamada), então o backend não deduplicaria os dois -- a
+  // única proteção real é não deixar o 2º envio começar. Trava o input
+  // aqui, libera no finally (sucesso, recusa OU erro).
+  if (input.disabled) return;
+  input.disabled = true;
+  statusEl.textContent = 'Enviando...';
+  statusEl.style.color = '';
+  const operationId = gerarOperationId();
+  const dispositivoId = obterDispositivoId();
+  // D7-08, achado ADJACENTE (INVESTIGACAO-D6-08-D7-08-OUTBOX-COWORK2.md):
+  // este operationId também só vivia numa variável local -- se o app
+  // morresse entre aqui e o poll resolver, a dica "dá pra conferir
+  // depois via consultarStatusOperacao" (comentário abaixo) não tinha
+  // como se cumprir. Marcador leve (SEM o base64 -- upload não tem
+  // retry automático, só reconciliação de desfecho) persistido ANTES
+  // do POST; reconciliarUploadsOrfaos() confirma no próximo boot.
+  await enfileirarChamadaComId(operationId, 'salvarArquivoOS', [osId, APP.tecnico.id, campo], 'UPLOAD', osId, 'LOCAL_PENDING_UPLOAD');
+  try {
+    const base64 = await lerArquivoComoBase64(file);
+    await enviarPOSTNoCors('salvarArquivoOS', [osId, APP.tecnico.id, campo, base64, file.type || 'image/jpeg', file.name || (campo + '.jpg'), operationId, dispositivoId]);
+    const resultado = await pollStatusOperacao(operationId);
+    // resultado.resultado.success (envelope canonico), nao mais
+    // resultado.status==='SYNCED' -- ver aviso em pollStatusOperacao.
+    if (resultado.resultado && resultado.resultado.success === true) {
+      await removerItemPorOperationId(operationId);
+      statusEl.textContent = 'Enviado ✓';
+      statusEl.style.color = 'var(--green)';
+      if (onSucesso) onSucesso(resultado.resultado.url || '');
+    } else if (resultado.resultado && resultado.resultado.success === false) {
+      await removerItemPorOperationId(operationId);
+      statusEl.textContent = mensagemRecusa(resultado.resultado, 'enviar');
+      statusEl.style.color = 'var(--red)';
+    } else {
+      // TIMEOUT do poll não é TIMEOUT do upload — o POST no-cors já foi
+      // enviado (o servidor pode estar processando ainda, ou a rede caiu
+      // DEPOIS do envio); operationId fica registrado, dá pra conferir
+      // depois via consultarStatusOperacao com o mesmo id. NÃO remove o
+      // marcador aqui -- desfecho ambíguo é exatamente o que
+      // reconciliarUploadsOrfaos() existe pra resolver depois.
+      statusEl.textContent = 'Envio em processamento — confira antes de concluir';
+      statusEl.style.color = 'var(--yellow)';
+    }
+  } catch (err) {
+    // Também não remove o marcador aqui -- pode ter sido um erro ANTES
+    // do POST (ex.: leitura do arquivo falhou, nada foi enviado) ou
+    // DEPOIS (POST saiu, algo falhou no meio); sem confirmar com o
+    // servidor não dá pra saber qual, então deixa a reconciliação
+    // decidir em vez de arriscar apagar um registro de algo que
+    // realmente aconteceu.
+    statusEl.textContent = 'Erro: ' + err.message;
+    statusEl.style.color = 'var(--red)';
+  } finally {
+    input.disabled = false;
+  }
+}
+
+// Frente B, fatia 4 (Diretriz v1.1) -- foto do desvio de KM. A tela
+// #scr-iniciar-km é compartilhada por 2 fluxos (APP.telaKmModo diz
+// qual): 'iniciar' (OS nova, ainda não existe em osAtiva/osPausada --
+// só em APP.osParaIniciar) e 'final-pendente' (OS já Concluída, fora
+// de osAtiva/osPausada -- só em APP.osKMPendenteAtual). Por isso o osId
+// é sempre passado explícito pro capturarEUpload genérico, nunca
+// inferido de osAtiva/osPausada como no caso de Laudo/Assinatura.
+function capturarFotoDesvioKM() {
+  const osId = APP.telaKmModo === 'final-pendente'
+    ? (APP.osKMPendenteAtual && APP.osKMPendenteAtual.osId)
+    : (APP.osParaIniciar && APP.osParaIniciar.id);
+  capturarEUpload('km-desvio-foto-input', 'km-desvio-foto-status', 'KM_Foto_Desvio_URL', osId, url => {
+    APP.kmDesvioFotoUrl = url;
+  });
+}
+
+// ================================================================
+// SELFIE + EPI + DIÁRIO — Frente B, fatia 2 (Diretriz v1.1)
+// ================================================================
+// Placement: disponível a qualquer momento com a OS ativa (botão em
+// scr-os-ativa), não forçado no check-in — o fluxo de início
+// (_iniciarOSDeVerdade) já navega direto pra carregarHome() em caso de
+// sucesso, e inserir um desvio obrigatório ali é risco maior do que o
+// valor desta fatia justifica. Registrado como simplificação, não
+// escondido.
+function irParaSelfieEPI() {
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  document.getElementById('selfie-epi-id').textContent = os.id;
+  showScreen('scr-selfie-epi');
+}
+
+async function enviarSelfieEPI() {
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  const statusEl = document.getElementById('selfie-epi-status');
+  const selfieStatusEl = document.getElementById('selfie-status');
+  const input = document.getElementById('selfie-input');
+  const file = input.files && input.files[0];
+
+  const epiChecklist = {
+    capacete: document.getElementById('epi-capacete').checked,
+    luvas_isolantes: document.getElementById('epi-luvas').checked,
+    oculos_protecao: document.getElementById('epi-oculos').checked,
+    calcado_seguranca: document.getElementById('epi-calcado').checked,
+    cinto_seguranca: document.getElementById('epi-cinto').checked,
+  };
+  const diarioTexto = document.getElementById('diario-texto').value.trim();
+
+  statusEl.textContent = 'Salvando...';
+  statusEl.style.color = '';
+  const operationId = gerarOperationId();
+  const dispositivoId = obterDispositivoId();
+  try {
+    const base64 = file ? await lerArquivoComoBase64(file) : '';
+    const mime = file ? (file.type || 'image/jpeg') : '';
+    await enviarPOSTNoCors('salvarSelfieEPI', [os.id, APP.tecnico.id, base64, mime, epiChecklist, diarioTexto, operationId, dispositivoId]);
+    const resultado = await pollStatusOperacao(operationId);
+    // resultado.resultado.success (envelope canonico), nao mais
+    // resultado.status==='SYNCED' -- ver aviso em pollStatusOperacao.
+    if (resultado.resultado && resultado.resultado.success === true) {
+      const r = resultado.resultado;
+      selfieStatusEl.textContent = r.url ? 'Selfie enviada ✓' : 'Sem selfie nesta gravação';
+      statusEl.textContent = 'Salvo — EPI ' + (r.epiOk ? 'completo' : 'incompleto') +
+        ' — elegibilidade financeira: ' + (r.elegivelFinanceiro ? 'sim' : 'ainda não');
+      statusEl.style.color = r.elegivelFinanceiro ? 'var(--green)' : 'var(--yellow)';
+    } else if (resultado.resultado && resultado.resultado.success === false) {
+      statusEl.textContent = mensagemRecusa(resultado.resultado, 'salvar');
+      statusEl.style.color = 'var(--red)';
+    } else {
+      statusEl.textContent = 'Envio em processamento — confira antes de sair';
+      statusEl.style.color = 'var(--yellow)';
+    }
+  } catch (err) {
+    statusEl.textContent = 'Erro: ' + err.message;
+    statusEl.style.color = 'var(--red)';
+  }
+}
+
+// ================================================================
+// FERRAMENTAL (carga/desmobilização) — Frente B, fatia 6 (Diretriz v1.1)
+// ================================================================
+// ⚠️ FATIA MÍNIMA, documentada como tal de propósito (mesmo padrão dos
+// outros degraus interim deste projeto). O fluxo real (referência:
+// web/ferramental.html, roda sobre SharePoint) tem catálogo de
+// ferramentas, trava de calibração vencida, e obrigatoriedade por tipo
+// de OS (Servico_Ferramenta_Obrigatoria) — nada disso existe hoje na
+// planilha do PWA, e portar exigiria um sync novo (SharePoint→Sheets)
+// que é decisão do dono + Cowork, já registrada como pendência em
+// docs/SPEC-PWA-TECNICO.md (mesma família de decisão que o sync de
+// Alocacoes_Ofertas da fatia anterior). Sem esse dado, não dá pra
+// mostrar uma lista de ferramentas disponíveis nem bloquear por
+// calibração vencida — inventar essa lista seria dado de negócio
+// fabricado, não uma simplificação honesta.
+//
+// O que ESTA fatia entrega: um registro append-only de carga/
+// desmobilização (Ferramental_Movimentos, contrato em
+// CONTRATO-BACKEND-FERRAMENTAL.md) — o técnico digita o código do
+// patrimônio (a etiqueta física da ferramenta) em vez de escolher de
+// uma lista. Não substitui o fluxo completo; documenta o que falta.
+//
+// getFerramentalDaOS/registrarMovimentoFerramental existem no backend
+// (CONTRATO-BACKEND-FERRAMENTAL.md, implementado e testado — Código.js/
+// API.js) desde 12/08. Cobertura ainda é só mock (Node vm) do lado
+// backend e mock de rede aqui — nenhum dos dois lados rodou contra
+// Sheets real ainda (ver PLANO-PRIMEIRO-DEPLOY-REAL.md).
+function irParaFerramental() {
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  document.getElementById('ferramental-os-id').textContent = os.id + ' - ' + os.cliente;
+  document.getElementById('ferramental-patrimonio').value = '';
+  document.getElementById('ferramental-observacao').value = '';
+  document.getElementById('ferramental-estado-ok').checked = true;
+  document.getElementById('ferramental-obs-bloco').style.display = 'none';
+  APP.ferramentalTipo = null;
+  selecionarTipoFerramental('Carga');
+  document.getElementById('ferramental-lista').textContent = 'Carregando...';
+  showScreen('scr-ferramental');
+  gsCall('getFerramentalDaOS', [os.id]).then(renderizarListaFerramental).catch(() => {
+    document.getElementById('ferramental-lista').textContent = 'Não foi possível carregar os registros já feitos (sem sinal?).';
+  });
+}
+
+function selecionarTipoFerramental(tipo) {
+  APP.ferramentalTipo = tipo;
+  document.getElementById('ferramental-btn-carga').classList.toggle('btn-green', tipo === 'Carga');
+  document.getElementById('ferramental-btn-desmob').classList.toggle('btn-green', tipo === 'Desmobilizacao');
+  document.getElementById('ferramental-desmob-bloco').style.display = tipo === 'Desmobilizacao' ? 'block' : 'none';
+}
+
+function atualizarObsFerramentalVisibilidade() {
+  const ok = document.getElementById('ferramental-estado-ok').checked;
+  document.getElementById('ferramental-obs-bloco').style.display = ok ? 'none' : 'block';
+}
+
+function renderizarListaFerramental(movimentos) {
+  const el = document.getElementById('ferramental-lista');
+  if (!movimentos || !movimentos.length) { el.textContent = 'Nenhum registro ainda'; return; }
+  el.innerHTML = movimentos.map(m =>
+    '<div style="padding:8px 0;border-bottom:1px solid var(--border)">' +
+      '<b>' + (m.tipoMovimento === 'Carga' ? 'Carga' : 'Desmobilização') + '</b> — ' + m.patrimonioCodigo +
+      (m.tipoMovimento === 'Desmobilizacao' ? (m.estadoOk ? ' (OK)' : ' (com problema: ' + (m.observacao || '') + ')') : '') +
+    '</div>'
+  ).join('');
+}
+
+function registrarMovimentoFerramental() {
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  const tipo = APP.ferramentalTipo || 'Carga';
+  const patrimonio = document.getElementById('ferramental-patrimonio').value.trim();
+  if (!patrimonio) { toast('Informe o código do patrimônio', true); return; }
+  let estadoOk = true, observacao = '';
+  if (tipo === 'Desmobilizacao') {
+    estadoOk = document.getElementById('ferramental-estado-ok').checked;
+    observacao = document.getElementById('ferramental-observacao').value.trim();
+    if (!estadoOk && !observacao) { toast('Descreva o problema pra registrar estado não OK', true); return; }
+  }
+  showLoading('Registrando...');
+  gsCallIdempotente(
+    'registrarMovimentoFerramental',
+    (opId, devId) => [os.id, APP.tecnico.id, patrimonio, tipo, estadoOk, observacao, opId, devId],
+    { enfileiravelSeOffline: true, tipoOperacao: 'FERRAMENTAL', osId: os.id }
+  ).then(r => {
+    hideLoading();
+    if (r.success === false) { toast(mensagemRecusa(r, 'registrar o movimento'), true); return; }
+    toast(r.offline ? 'Registrado (offline) — sincroniza quando voltar sinal' : 'Registrado');
+    document.getElementById('ferramental-patrimonio').value = '';
+    document.getElementById('ferramental-observacao').value = '';
+    document.getElementById('ferramental-estado-ok').checked = true;
+    document.getElementById('ferramental-obs-bloco').style.display = 'none';
+    gsCall('getFerramentalDaOS', [os.id]).then(renderizarListaFerramental).catch(() => {});
+  }).catch(err => { hideLoading(); toast('Erro: ' + err.message, true); });
+}
+
+// ================================================================
+// ESTADO GLOBAL
+// ================================================================
+const APP = {
+  tecnico: null, osAtiva: null, osPausada: null, osList: [],
+  timerInterval: null, timerSec: 0, motivoSelecionado: null,
+  usaVeiculoHoje: null, kmInicial: null, veiculo: undefined,
+  veiculoOrigem: 'scr-home',
+  // Frente B, fatia 4 (Diretriz v1.1) -- foto do desvio de KM. telaKmModo
+  // distingue as 2 telas que compartilham #scr-iniciar-km (iniciar OS
+  // nova vs. preencher KM final pendente de OS ja concluida), porque
+  // capturarFotoDesvioKM() precisa saber em qual OS gravar o arquivo e
+  // nenhuma das duas necessariamente tem APP.osAtiva/osPausada setado
+  // nesse momento (a OS pode ainda nao ter comecado, ou ja ter encerrado).
+  kmDesvioFotoUrl: '', telaKmModo: null,
+  // Frente B, fatia 5 -- estado do fluxo de aceite de oferta via link
+  // profundo. Independente de APP.tecnico (sessão normal): este fluxo
+  // roda ANTES do login, com identidade fixa vinda do link.
+  ofertaLink: null, ofertaAtual: null,
+  // Frente B, fatia 6 -- tipo selecionado na tela de ferramental (Carga/Desmobilizacao).
+  ferramentalTipo: null
+};
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const tela = document.getElementById(id);
+  if (tela) { tela.classList.add('active'); window.scrollTo(0,0); }
+}
+function voltar(id) { showScreen(id); }
+
+function showLoading(msg) {
+  document.getElementById('loading-msg').textContent = msg || 'Aguarde...';
+  document.getElementById('loading').classList.add('show');
+}
+function hideLoading() { document.getElementById('loading').classList.remove('show'); }
+
+// Lock explícito pra ações críticas (14/08, endurece o achado da
+// auditoria TOCTOU -- AUDITORIA-TOCTOU-FRONTEND.md). Antes disso, a
+// proteção contra duplo-clique nesses 3 botões era IMPLÍCITA
+// (showLoading síncrono + overlay #loading bloqueando clique por
+// baixo) -- funcionava, mas dependia da ORDEM do código: nenhum teste
+// pegaria a regressão se alguém inserisse um await antes do
+// showLoading() no futuro. Isto é independente da UI -- um Set de
+// chaves em andamento, checado/liberado explicitamente logo no início
+// e em cada saída de cada handler crítico, então uma mudança futura
+// no showLoading() não reabre a corrida silenciosamente.
+const ACOES_CRITICAS_EM_ANDAMENTO = new Set();
+function acaoCriticaEmAndamento(chave) { return ACOES_CRITICAS_EM_ANDAMENTO.has(chave); }
+function travarAcaoCritica(chave) { ACOES_CRITICAS_EM_ANDAMENTO.add(chave); }
+function destravarAcaoCritica(chave) { ACOES_CRITICAS_EM_ANDAMENTO.delete(chave); }
+
+function toast(msg, isErr) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (isErr ? ' err' : '');
+  setTimeout(() => { el.className = ''; }, 3000);
+}
+
+// ================================================================
+// CRONOMETRO (identico ao original, so client-side)
+// ================================================================
+const LS_TIMER_KEY = 'eletrium_timer';
+function salvarTimerLS(osId, inicioTs, horasJaAcum, pausado) {
+  localStorage.setItem(LS_TIMER_KEY, JSON.stringify({ osId, inicioTs, horasJaAcum: horasJaAcum || 0, pausado: !!pausado }));
+}
+function lerTimerLS() { try { return JSON.parse(localStorage.getItem(LS_TIMER_KEY)) || null; } catch(e) { return null; } }
+function limparTimerLS() { localStorage.removeItem(LS_TIMER_KEY); }
+
+// UX (15/08, pedido do Geovane apos testar o fluxo real): relogio ao
+// vivo tirado da tela durante a execucao -- so mostra "Em andamento"
+// (estatico); o tempo total real (calculado no servidor a partir dos
+// timestamps, nao do relogio do navegador) so aparece na tela de
+// resultado do encerramento (mostrarResultadoEncerramento, ja mostrava
+// res.horasFinais -- isso nao mudou). salvarTimerLS/APP.timerInterval
+// continuam existindo pra outras partes do app saberem que ha uma OS
+// em andamento entre reloads -- so o TICK visual de 500ms foi removido.
+function iniciarCronometro(horasJaAcum) {
+  pararCronometro();
+  const ref = Date.now();
+  const baseMs = (horasJaAcum || 0) * 3600000;
+  // .timer-display e 54px/tabular, desenhado pro texto curto "00:00:00"
+  // -- fonte reduzida via inline style pro texto mais longo caber sem
+  // estourar o card num celular.
+  const el1 = document.getElementById('home-timer'), el2 = document.getElementById('ativa-timer');
+  if (el1) { el1.textContent = 'Em andamento'; el1.style.fontSize = '22px'; el1.style.letterSpacing = 'normal'; }
+  if (el2) { el2.textContent = 'Em andamento'; el2.style.fontSize = '22px'; el2.style.letterSpacing = 'normal'; }
+  if (APP.osAtiva) salvarTimerLS(APP.osAtiva.id, ref - baseMs, horasJaAcum || 0, false);
+}
+function pararCronometro() { if (APP.timerInterval) { clearInterval(APP.timerInterval); APP.timerInterval = null; } }
+function restaurarCronometroAoCarregar() {
+  const ts = lerTimerLS();
+  if (!ts) return;
+  if (APP.osAtiva && ts.osId === APP.osAtiva.id && !ts.pausado) iniciarCronometro((Date.now() - ts.inicioTs) / 3600000);
+}
+
+// ================================================================
+// INICIO DO DIA
+// ================================================================
+// UX (15/08, pedido do Geovane apos testar o fluxo real): saudacao fixa
+// "Bom dia" nao fazia sentido pra tecnico entrando a tarde/noite.
+function saudacaoPorHorario() {
+  const hora = new Date().getHours();
+  if (hora < 12) return 'Bom dia';
+  if (hora < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+function irParaInicioDia() {
+  const nome = APP.tecnico ? APP.tecnico.nome.split(' ')[0] : '';
+  document.getElementById('inicio-sub').textContent = saudacaoPorHorario() + ', ' + nome + '!';
+  document.getElementById('card-veiculo-pergunta').style.display = 'block';
+  document.getElementById('card-km').style.display = 'none';
+  document.getElementById('card-sem-km').style.display = 'none';
+  document.getElementById('card-sem-veiculo').style.display = 'none';
+  const antigoAviso = document.getElementById('card-km').querySelector('.aviso-pendente-veiculo');
+  if (antigoAviso) antigoAviso.remove();
+  document.getElementById('inicio-km').value = '';
+  document.getElementById('inicio-veiculo-id').value = '';
+  APP.usaVeiculoHoje = null;
+  showScreen('scr-inicio-dia');
+}
+
+function responderVeiculo(usa) {
+  APP.usaVeiculoHoje = usa;
+  document.getElementById('card-veiculo-pergunta').style.display = 'none';
+  document.getElementById('card-sem-veiculo').style.display = 'none';
+  if (!usa) {
+    document.getElementById('card-km').style.display = 'none';
+    document.getElementById('card-sem-km').style.display = 'block';
+    return;
+  }
+  if (APP.veiculo !== undefined) { _mostrarFluxoKM(APP.veiculo); return; }
+  showLoading('Verificando veiculo...');
+  gsCall('getVeiculoDoTecnico', [APP.tecnico.id]).then(v => {
+    hideLoading();
+    APP.veiculo = v;
+    _mostrarFluxoKM(v);
+  }).catch(() => {
+    hideLoading();
+    document.getElementById('card-km').style.display = 'block';
+    setTimeout(() => document.getElementById('inicio-km').focus(), 100);
+  });
+}
+
+function _mostrarFluxoKM(veiculo) {
+  const semVeiculoEl = document.getElementById('card-sem-veiculo');
+  const kmEl = document.getElementById('card-km');
+  const semKmEl = document.getElementById('card-sem-km');
+  if (!veiculo || veiculo.statusAprovacao === 'Rejeitado') {
+    const msg = (veiculo && veiculo.statusAprovacao === 'Rejeitado')
+      ? 'Seu cadastro de veiculo foi rejeitado. Cadastre novamente para receber o reembolso de KM.'
+      : 'Voce ainda nao tem veiculo cadastrado ou aprovado. Cadastre agora para registrar o KM e receber o reembolso.';
+    document.getElementById('sem-veiculo-msg').textContent = msg;
+    semVeiculoEl.style.display = 'block'; kmEl.style.display = 'none'; semKmEl.style.display = 'none';
+    return;
+  }
+  semVeiculoEl.style.display = 'none'; semKmEl.style.display = 'none';
+  const antigoAviso = kmEl.querySelector('.aviso-pendente-veiculo');
+  if (antigoAviso) antigoAviso.remove();
+  if (veiculo.statusAprovacao === 'Pendente' || veiculo.alteracaoPendente) {
+    const aviso = document.createElement('div');
+    aviso.className = 'alert alert-warn aviso-pendente-veiculo';
+    aviso.style.marginBottom = '12px';
+    aviso.innerHTML = '<span>!</span><span>Veiculo aguardando aprovacao do gestor. O KM sera registrado normalmente, mas o reembolso so sera calculado apos a aprovacao.</span>';
+    kmEl.insertBefore(aviso, kmEl.firstChild);
+  }
+  const veiculoIdEl = document.getElementById('inicio-veiculo-id');
+  if (veiculo.placa && !veiculoIdEl.value) veiculoIdEl.value = veiculo.placa + (veiculo.modelo ? ' - ' + veiculo.modelo : '');
+  kmEl.style.display = 'block';
+  setTimeout(() => document.getElementById('inicio-km').focus(), 100);
+}
+
+function confirmarInicioDia(usaVeiculo) {
+  let kmInicial = null, veiculoId = null;
+  if (usaVeiculo) {
+    const kmVal = document.getElementById('inicio-km').value.trim();
+    if (!kmVal) { toast('Informe o KM inicial do odometro', true); return; }
+    kmInicial = kmVal;
+    veiculoId = document.getElementById('inicio-veiculo-id').value.trim() || null;
+  }
+  showLoading('Registrando inicio do dia...');
+  gsCallIdempotente('registrarInicioDia',
+    (opId, devId) => [APP.tecnico.id, APP.tecnico.nome, usaVeiculo, kmInicial, veiculoId, opId, devId],
+    { enfileiravelSeOffline: true, tipoOperacao: 'APONTAMENTO', osId: '' })
+    .then(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      APP.usaVeiculoHoje = usaVeiculo; APP.kmInicial = kmInicial;
+      toast(res.offline ? 'Dia iniciado (offline — sincroniza depois)' : 'Dia iniciado as ' + res.hora);
+      carregarHome();
+    }).catch(() => { hideLoading(); toast('Erro ao iniciar dia', true); });
+}
+
+// ================================================================
+// GEOLOCALIZACAO
+// ================================================================
+function capturarGeolocalizacao(callback) {
+  if (!navigator.geolocation) { callback(null, null); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => callback(pos.coords.latitude.toFixed(6), pos.coords.longitude.toFixed(6)),
+    () => callback(null, null),
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+  );
+}
+
+// ================================================================
+// FIM DO DIA
+// ================================================================
+function confirmarFimDia() {
+  const kmFinal = document.getElementById('resumo-km-final').value.trim();
+  if (!kmFinal) { toast('Informe o KM final do odometro', true); return; }
+  showLoading('Registrando KM final...');
+  gsCallIdempotente('registrarFimDia',
+    (opId, devId) => [APP.tecnico.id, kmFinal, opId, devId],
+    { enfileiravelSeOffline: true, tipoOperacao: 'APONTAMENTO', osId: '' })
+    .then(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      document.getElementById('resumo-km-block').style.display = 'none';
+      toast(res.offline ? 'Registrado (offline — sincroniza depois)' :
+        (res.kmRodado > 0 ? 'Dia encerrado — ' + res.kmRodado + ' km rodados' : 'Dia encerrado as ' + res.hora));
+    }).catch(() => { hideLoading(); toast('Erro ao registrar KM', true); });
+}
+
+// ================================================================
+// LOGIN
+// ================================================================
+// UX (15/08, pedido do Geovane): a tela de login parava de listar TODOS
+// os tecnicos cadastrados pra tocar -- expunha a lista completa de
+// nomes na tela. getTecnicos() continua sendo buscado (precisa do
+// mapeamento nome->ID pra achar o tecnicoId certo quando o tecnico
+// digita o proprio nome), só não é mais renderizado como lista visível
+// -- fica em APP.tecnicosCache, consultado só na hora de confirmar.
+function carregarTecnicos() {
+  document.getElementById('login-erro').style.display = 'none';
+  gsCall('getTecnicos', []).then(lista => {
+    if (!lista || !lista.length) { errTecnicos(new Error('Lista de tecnicos veio vazia (resposta OK, mas sem dados)')); return; }
+    APP.tecnicosCache = lista;
+  }).catch(errTecnicos);
+}
+function errTecnicos(err) {
+  APP.tecnicosCache = null;
+  const el = document.getElementById('login-erro');
+  el.style.display = 'flex';
+  const msgDetalhe = (err && err.message) ? err.message : 'Erro desconhecido';
+  el.innerHTML = '<div>Erro ao carregar tecnicos<br>' +
+    '<span style="font-size:11px;opacity:.85;word-break:break-all">Detalhe: ' + msgDetalhe + '</span><br>' +
+    '<button class="btn btn-gray btn-sm" style="margin-top:10px" onclick="carregarTecnicos()">Tentar novamente</button></div>';
+}
+// Remove acentos/caixa pra comparar nomes digitados sem exigir digitação
+// exata de acentuação (ex.: "joao" bate com "João").
+function normalizarNome(s) {
+  return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+function confirmarNomeLogin() {
+  const nomeDigitado = document.getElementById('login-nome-input').value;
+  if (!normalizarNome(nomeDigitado)) { toast('Digite seu nome', true); return; }
+  if (!APP.tecnicosCache) {
+    toast('Ainda carregando a lista de tecnicos, tente novamente em instantes', true);
+    carregarTecnicos();
+    return;
+  }
+  const alvo = normalizarNome(nomeDigitado);
+  const candidatos = APP.tecnicosCache.filter(t =>
+    normalizarNome(t.nome) === alvo || normalizarNome(t.nome).split(' ')[0] === alvo);
+  const el = document.getElementById('login-erro');
+  if (candidatos.length === 1) { el.style.display = 'none'; entrarComoTecnico(candidatos[0]); return; }
+  el.style.display = 'flex';
+  el.textContent = candidatos.length > 1
+    ? 'Mais de um tecnico encontrado com esse nome -- digite o nome completo.'
+    : 'Nome nao encontrado. Verifique a grafia e tente novamente.';
+}
+
+function entrarComoTecnico(tec) {
+  APP.tecnicoPendente = tec;
+  document.getElementById('pin-tecnico-nome').textContent = tec.nome.split(' ')[0];
+  document.getElementById('pin-input').value = '';
+  document.getElementById('pin-erro').style.display = 'none';
+  showScreen('scr-pin');
+  setTimeout(() => document.getElementById('pin-input').focus(), 150);
+}
+
+function confirmarPin() {
+  const pin = document.getElementById('pin-input').value.trim();
+  const tec = APP.tecnicoPendente;
+  if (!tec) { showScreen('scr-login'); return; }
+  if (!pin) { toast('Digite o PIN', true); return; }
+  showLoading('Verificando...');
+  gsCall('validarPin', [tec.id, pin]).then(res => {
+    hideLoading();
+    if (!res || res.valido !== true) {
+      document.getElementById('pin-erro').style.display = 'flex';
+      document.getElementById('pin-erro').textContent = (res && res.erro) ? res.erro : 'PIN incorreto. Tente novamente.';
+      document.getElementById('pin-input').value = '';
+      document.getElementById('pin-input').focus();
+      return;
+    }
+    _entrarConfirmado(tec);
+  }).catch(() => {
+    hideLoading();
+    document.getElementById('pin-erro').style.display = 'flex';
+    document.getElementById('pin-erro').textContent = 'Sem conexao para verificar o PIN. Tente novamente com sinal.';
+  });
+}
+
+function _entrarConfirmado(tec) {
+  APP.tecnico = tec;
+  localStorage.setItem('eletrium_tecnico', JSON.stringify(tec));
+  showLoading('Verificando dia...');
+  gsCall('getDiariaHoje', [tec.id]).then(diaria => {
+    hideLoading();
+    if (!diaria || !diaria.existe) { irParaInicioDia(); }
+    else { APP.usaVeiculoHoje = diaria.usaVeiculo; APP.kmInicial = diaria.kmInicial; carregarHome(); }
+  }).catch(() => { hideLoading(); carregarHome(); });
+}
+
+function logOut() {
+  pararCronometro(); limparTimerLS();
+  APP.tecnico = null; APP.osAtiva = null; APP.osPausada = null;
+  APP.osList = []; APP.usaVeiculoHoje = null; APP.kmInicial = null;
+  APP.veiculo = undefined; APP.veiculoOrigem = 'scr-home';
+  localStorage.removeItem('eletrium_tecnico');
+  document.getElementById('login-nome-input').value = '';
+  showScreen('scr-login'); carregarTecnicos();
+}
+
+// ================================================================
+// ACEITE DA OFERTA VIA LINK PROFUNDO -- Frente B, fatia 5 (Diretriz
+// v1.1), recomendação registrada em docs/SPEC-PWA-TECNICO.md §1: PIN +
+// link profundo (WhatsApp) em vez do portal-alocacao.html (MSAL, morto
+// por construção pro técnico MEI sem conta Microsoft).
+//
+// getOfertaAlocacao e registrarAceiteOferta existem no backend
+// (CONTRATO-BACKEND-ACEITE-OFERTA.md, implementado e testado — Código.js/
+// API.js) desde 12/08, incluindo a aba Alocacoes_Ofertas e a validação
+// HMAC do link. Cobertura ainda é só mock (Node vm) do lado backend e
+// mock de rede aqui — nenhum dos dois lados rodou contra Sheets real
+// ainda (ver PLANO-PRIMEIRO-DEPLOY-REAL.md).
+//
+// O link (#oferta&id=...&tecnico=...&exp=...&sig=...) é gerado por
+// QUEM CRIA a oferta (gestor/Cowork, fora desta fatia) -- o app do
+// técnico NUNCA calcula nem valida a assinatura, só repassa os 4
+// campos pro backend, que é o único lugar com o segredo HMAC
+// (PropertiesService, mesmo padrão já desenhado pra Opção A do gap de
+// auth do dispatcher -- DESENHO-FRENTE-E-AUTH-DISPATCHER.md -- mas
+// aplicado aqui só a esta ação pontual, não como sessão geral).
+function parseLinkOferta() {
+  const hash = (location.hash || '').replace(/^#/, '');
+  if (!hash.startsWith('oferta')) return null;
+  const params = new URLSearchParams(hash.replace(/^oferta&?/, ''));
+  const id = params.get('id'), tecnico = params.get('tecnico'), exp = params.get('exp'), sig = params.get('sig');
+  if (!id || !tecnico || !exp || !sig) return null;
+  return { id, tecnico, exp, sig };
+}
+
+function abrirTelaOferta(link) {
+  APP.ofertaLink = link; APP.ofertaAtual = null;
+  // Limpa o hash da URL JÁ AQUI, não só em fecharTelaOferta() -- achado
+  // na revisão de integração das 5 fatias: se o técnico fechar o
+  // navegador/app no meio do fluxo (sem nunca tocar "Fechar"), o hash
+  // #oferta&... ficava na aba, e o próximo reload reabria esta tela por
+  // cima de uma sessão normal já em andamento (OS ativa, checklist em
+  // progresso etc.) -- os dados em APP.ofertaLink já estão em memória,
+  // então limpar a URL agora não afeta o resto deste fluxo.
+  history.replaceState(null, '', location.pathname + location.search);
+  document.getElementById('oferta-pin-input').value = '';
+  document.getElementById('oferta-pin-erro').style.display = 'none';
+  showScreen('scr-oferta-pin');
+}
+
+// Gate PRÓPRIO -- reusa a mesma action 'validarPin' do login normal
+// (Frente E, não alterada), mas não entra no fluxo normal do app
+// (sem getDiariaHoje/carregarHome/APP.tecnico de sessão): a identidade
+// já vem fixa no link, só falta confirmar o PIN pra esta ação pontual.
+function confirmarPinOferta() {
+  const pin = document.getElementById('oferta-pin-input').value.trim();
+  const link = APP.ofertaLink;
+  if (!link) { showScreen('scr-login'); carregarTecnicos(); return; }
+  if (!pin) { toast('Digite o PIN', true); return; }
+  showLoading('Verificando...');
+  gsCall('validarPin', [link.tecnico, pin]).then(res => {
+    hideLoading();
+    if (!res || res.valido !== true) {
+      const erroEl = document.getElementById('oferta-pin-erro');
+      erroEl.style.display = 'flex';
+      erroEl.textContent = (res && res.erro) ? res.erro : 'PIN incorreto. Tente novamente.';
+      document.getElementById('oferta-pin-input').value = '';
+      return;
+    }
+    carregarOferta();
+  }).catch(() => {
+    hideLoading();
+    const erroEl = document.getElementById('oferta-pin-erro');
+    erroEl.style.display = 'flex';
+    erroEl.textContent = 'Sem conexao para verificar o PIN. Tente novamente com sinal.';
+  });
+}
+
+function mostrarStatusOferta(titulo, msg, cor) {
+  document.getElementById('oferta-status-titulo').textContent = titulo;
+  document.getElementById('oferta-status-titulo').style.color = cor || 'var(--text)';
+  document.getElementById('oferta-status-msg').textContent = msg;
+  showScreen('scr-oferta-status');
+}
+
+function carregarOferta() {
+  const link = APP.ofertaLink;
+  showLoading('Carregando oferta...');
+  gsCall('getOfertaAlocacao', [link.id, link.tecnico, link.exp, link.sig]).then(oferta => {
+    hideLoading();
+    if (!oferta || oferta.encontrada === false) {
+      mostrarStatusOferta('Link inválido', oferta && oferta.erro ? oferta.erro : 'Esta oferta não foi encontrada ou o link não é válido.', 'var(--red)');
+      return;
+    }
+    if (oferta.expirada) {
+      mostrarStatusOferta('Oferta expirada', 'Esta oferta expirou em ' + (oferta.expiraEm || '') + '. Fale com seu gestor pra uma nova oferta.', 'var(--yellow)');
+      return;
+    }
+    if (oferta.status && oferta.status !== 'Pendente') {
+      mostrarStatusOferta('Oferta já respondida', 'Esta oferta já foi ' + (oferta.status === 'Aceita' ? 'aceita' : 'recusada') + ' anteriormente.', 'var(--gray)');
+      return;
+    }
+    APP.ofertaAtual = oferta;
+    document.getElementById('oferta-os-id').textContent = oferta.osId || '';
+    document.getElementById('oferta-resumo').textContent = oferta.escopoResumo || '(sem resumo)';
+    document.getElementById('oferta-prazo').textContent = oferta.expiraEm ? ('Expira em ' + oferta.expiraEm) : '';
+    document.getElementById('oferta-motivo-recusa').value = '';
+    const valorBloco = document.getElementById('oferta-valor-bloco');
+    if (oferta.valorProposto) {
+      valorBloco.style.display = 'block';
+      document.getElementById('oferta-valor').textContent = 'R$ ' + oferta.valorProposto;
+    } else {
+      valorBloco.style.display = 'none';
+    }
+    showScreen('scr-oferta');
+  }).catch(err => { hideLoading(); mostrarStatusOferta('Erro', 'Erro ao carregar a oferta: ' + err.message, 'var(--red)'); });
+}
+
+function aceitarOferta() {
+  if (!confirm('Confirma que aceita esta oferta de serviço?')) return;
+  _registrarAceiteOferta(true, '');
+}
+function recusarOferta() {
+  const motivo = document.getElementById('oferta-motivo-recusa').value.trim();
+  if (!motivo) { toast('Informe o motivo da recusa', true); return; }
+  if (!confirm('Confirma que recusa esta oferta?')) return;
+  _registrarAceiteOferta(false, motivo);
+}
+function _registrarAceiteOferta(aceito, motivo) {
+  // Lock explícito, compartilhado entre aceitar/recusar -- é a MESMA
+  // operação crítica (uma resposta pra oferta), então uma chave só.
+  if (acaoCriticaEmAndamento('aceiteOferta')) return;
+  travarAcaoCritica('aceiteOferta');
+  const link = APP.ofertaLink;
+  const osIdRef = APP.ofertaAtual ? APP.ofertaAtual.osId : '';
+  showLoading(aceito ? 'Registrando aceite...' : 'Registrando recusa...');
+  gsCallIdempotente(
+    'registrarAceiteOferta',
+    (opId, devId) => [link.id, link.tecnico, aceito, motivo, opId, devId],
+    { enfileiravelSeOffline: true, tipoOperacao: 'ACEITE_OFERTA', osId: osIdRef }
+  ).then(r => {
+    destravarAcaoCritica('aceiteOferta');
+    hideLoading();
+    if (r.offline) {
+      mostrarStatusOferta(aceito ? 'Aceite enfileirado' : 'Recusa enfileirada', 'Sem sinal agora -- sincroniza automaticamente quando a conexão voltar.', 'var(--yellow)');
+      return;
+    }
+    if (r.success === false) {
+      // Mesmo padrao de mensagemRecusa (blocking_reasons + retryable),
+      // adaptado pra mostrarStatusOferta (que já tem título próprio,
+      // então só o motivo entra no corpo -- motivosRecusa, não
+      // mensagemRecusa).
+      const titulo = r.retryable ? 'Não foi possível registrar (tente novamente)' : 'Não foi possível registrar';
+      mostrarStatusOferta(titulo, motivosRecusa(r), r.retryable ? 'var(--yellow)' : 'var(--red)');
+      return;
+    }
+    mostrarStatusOferta(aceito ? 'Oferta aceita!' : 'Oferta recusada', aceito ? 'Você aceitou esta oferta de serviço.' : 'Sua recusa foi registrada.', aceito ? 'var(--green)' : 'var(--text)');
+  }).catch(err => { destravarAcaoCritica('aceiteOferta'); hideLoading(); mostrarStatusOferta('Erro', 'Erro ao registrar: ' + err.message, 'var(--red)'); });
+}
+
+function fecharTelaOferta() {
+  APP.ofertaLink = null; APP.ofertaAtual = null;
+  history.replaceState(null, '', location.pathname + location.search);
+  showScreen('scr-login'); carregarTecnicos();
+}
+
+// ================================================================
+// HOME
+// ================================================================
+function carregarHome() {
+  showLoading('Carregando OS...');
+  const nome = APP.tecnico ? APP.tecnico.nome.split(' ')[0] : '';
+  const hoje = new Date().toLocaleDateString('pt-BR', {weekday:'short',day:'2-digit',month:'short'});
+  document.getElementById('home-titulo').textContent = 'Olá, ' + nome;
+  document.getElementById('home-sub').textContent = hoje;
+  showScreen('scr-home');
+  gsCall('getOSsPendentesKMFinal', [APP.tecnico.id]).then(renderBannerKMPendente).catch(() => {});
+  gsCall('getOsDoTecnico', [APP.tecnico.id]).then(renderHome).catch(() => {
+    hideLoading();
+    const el = document.getElementById('home-os-lista');
+    el.innerHTML = '<div class="card" style="text-align:center;padding:32px">' +
+      '<div style="color:var(--yellow)">Sem conexao no momento</div>' +
+      '<div style="color:var(--gray);font-size:13px;margin-top:6px;margin-bottom:14px">As OS aparecem assim que o sinal voltar</div>' +
+      '<button class="btn btn-gray btn-sm" style="margin-bottom:0" onclick="carregarHome()">Tentar novamente</button></div>';
+  });
+}
+
+function renderHome(lista) {
+  hideLoading();
+  APP.osList = lista || []; APP.osAtiva = null; APP.osPausada = null;
+  APP.osList.forEach(os => {
+    if (os.emPausa) { APP.osPausada = os; }
+    else if (os.statusAtual === 'Em andamento' || os.status === 'Em andamento') {
+      if (!APP.osPausada || !os.emPausa) APP.osAtiva = os;
+    }
+  });
+  const timerBlock = document.getElementById('home-timer-block');
+  const pausaBlock = document.getElementById('home-pausa-block');
+  timerBlock.style.display = APP.osAtiva ? 'block' : 'none';
+  pausaBlock.style.display = APP.osPausada ? 'block' : 'none';
+  if (APP.osAtiva) {
+    document.getElementById('home-timer-os').textContent = APP.osAtiva.cliente + ' - ' + APP.osAtiva.id;
+    iniciarCronometro(APP.osAtiva.horasProdutivas || 0);
+    restaurarCronometroAoCarregar();
+  }
+  if (APP.osPausada) document.getElementById('home-pausa-motivo').textContent = APP.osPausada.motivoPausa || 'Pausada';
+
+  renderStatusSincronizacao('home-sync-status');
+
+  // UX (15/08, pedido do Geovane): com uma OS ativa, o ambiente foca só
+  // nela -- a lista de "Próximas" some da tela (não só fica vazia,
+  // some mesmo, label incluído) até a OS ser pausada ou encerrada.
+  const secaoProximas = document.getElementById('home-proximas-secao');
+  secaoProximas.style.display = APP.osAtiva ? 'none' : 'block';
+  if (APP.osAtiva) return;
+
+  // "Próximas" -- só OS que ainda não começaram; a pausada já tem card
+  // próprio acima (home-pausa-block), não precisa aparecer 2x na
+  // mesma tela.
+  const proximas = APP.osList.filter(os => !os.emPausa && os.statusAtual !== 'Em andamento');
+  const el = document.getElementById('home-os-lista');
+  if (!proximas.length) {
+    el.innerHTML = '<div class="card" style="text-align:center;padding:32px"><div style="color:var(--gray)">Nenhuma OS pendente hoje</div></div>';
+    return;
+  }
+  el.innerHTML = '';
+  proximas.forEach(os => {
+    const isAtiva = os.statusAtual === 'Em andamento' && !os.emPausa;
+    const isPausada = os.emPausa;
+    const div = document.createElement('div');
+    div.className = 'os-item' + (isAtiva ? ' active-os' : isPausada ? ' paused-os' : '');
+    const statusBadge = isAtiva ? '<span class="badge badge-green">ATIVA</span>' :
+      isPausada ? '<span class="badge badge-yellow">PAUSADA</span>' : '<span class="badge badge-gray">Pendente</span>';
+    const priBadge = os.prioridade && os.prioridade.toLowerCase().includes('emerg') ? '<span class="badge badge-red">EMG</span>' : '';
+    div.innerHTML = '<div class="os-id">' + os.id + '</div>' +
+      '<div class="os-cliente">' + (os.cliente || 'Cliente') + '</div>' +
+      '<div class="os-desc">' + (os.descricao || '') + '</div>' +
+      '<div class="os-badges">' + statusBadge + priBadge +
+      (os.horaInicio ? '<span class="badge badge-gray">' + os.horaInicio + '</span>' : '') +
+      (os.metaDia > 0 ? '<span class="badge badge-gray">Meta: ' + os.qtdRealizada + '/' + os.metaDia + ' ' + os.unidadeMeta + '</span>' : '') +
+      '</div>';
+    div.addEventListener('click', () => abrirOS(os));
+    el.appendChild(div);
+  });
+}
+
+// KM por-OS: banner de "falta preencher KM final" (OS Concluida, com
+// KM_Inicial_OS preenchido, KM_Final_OS vazio, ate 3 dias atras).
+function renderBannerKMPendente(pendentes) {
+  const existente = document.getElementById('banner-km-pendente');
+  if (existente) existente.remove();
+  if (!pendentes || !pendentes.length) return;
+  const el = document.createElement('div');
+  el.id = 'banner-km-pendente';
+  el.className = 'alert alert-warn';
+  el.style.cssText = 'margin-bottom:12px;cursor:pointer';
+  el.innerHTML = '<span>!</span><div>Falta o KM final de ' + pendentes.length + ' OS. Toque para preencher.</div>';
+  el.onclick = () => abrirPreenchimentoKMFinal(pendentes);
+  const lista = document.getElementById('home-os-lista');
+  lista.parentNode.insertBefore(el, lista);
+}
+
+function abrirPreenchimentoKMFinal(pendentes) {
+  APP.kmPendenteFila = pendentes.slice();
+  _proximoKMPendente();
+}
+
+function _proximoKMPendente() {
+  if (!APP.kmPendenteFila || !APP.kmPendenteFila.length) { carregarHome(); return; }
+  const item = APP.kmPendenteFila[0];
+  document.getElementById('iniciar-km-cliente').textContent = item.cliente + ' - ' + item.osId + ' (encerrada ' + item.dataEncerramento + ')';
+  document.getElementById('iniciar-km-input').value = '';
+  document.getElementById('iniciar-km-justificativa').value = '';
+  document.getElementById('iniciar-km-desvio-bloco').style.display = 'none';
+  document.getElementById('km-desvio-foto-status').textContent = 'Nenhuma foto enviada ainda';
+  document.getElementById('km-desvio-foto-status').style.color = 'var(--gray)';
+  APP.kmDesvioFotoUrl = ''; APP.telaKmModo = 'final-pendente';
+  APP.osKMPendenteAtual = item;
+  showScreen('scr-iniciar-km');
+  // Reaproveita a mesma tela — troca o botao para a acao de KM final pendente.
+  document.querySelector('#scr-iniciar-km .btn-green').setAttribute('onclick', 'confirmarKMFinalPendente()');
+}
+
+function confirmarKMFinalPendente() {
+  // Lock explícito primeiro que qualquer outra coisa -- ver
+  // ACOES_CRITICAS_EM_ANDAMENTO acima do toast().
+  if (acaoCriticaEmAndamento('kmFinalPendente')) return;
+  const km = document.getElementById('iniciar-km-input').value.trim();
+  if (!km) { toast('Informe o KM do odometro', true); return; }
+  const justificativa = document.getElementById('iniciar-km-justificativa').value.trim();
+  travarAcaoCritica('kmFinalPendente');
+  showLoading('Registrando KM final...');
+  gsCallIdempotente('registrarKMFinalPendente',
+    (opId, devId) => [APP.osKMPendenteAtual.osId, APP.tecnico.id, km, justificativa, APP.kmDesvioFotoUrl || '', opId, devId],
+    { enfileiravelSeOffline: true, tipoOperacao: 'KM', osId: APP.osKMPendenteAtual.osId })
+    .then(res => {
+      destravarAcaoCritica('kmFinalPendente');
+      hideLoading();
+      if (res.exigeJustificativa) {
+        document.getElementById('iniciar-km-desvio-bloco').style.display = 'block';
+        document.getElementById('iniciar-km-desvio-msg').textContent = res.mensagem;
+        return;
+      }
+      if (res.erro) { toast(mensagemRecusa(res, 'registrar o KM final'), true); return; }
+      APP.kmPendenteFila.shift();
+      toast('KM registrado');
+      // Reverte o botao para a acao normal de iniciar OS antes de sair da tela/repetir.
+      document.querySelector('#scr-iniciar-km .btn-green').setAttribute('onclick', 'confirmarKMInicial()');
+      _proximoKMPendente();
+    }).catch(err => { destravarAcaoCritica('kmFinalPendente'); hideLoading(); toast('Erro ao registrar KM: ' + err.message, true); });
+}
+
+function abrirOS(os) {
+  if (os.emPausa) { APP.osPausada = os; irParaPausada(); return; }
+  if (os.statusAtual === 'Em andamento' && !os.emPausa) { APP.osAtiva = os; irParaOsAtiva(); return; }
+  if (!APP.osAtiva && !APP.osPausada) confirmarIniciarOS(os);
+  else toast('Encerre ou pause a OS ativa primeiro', true);
+}
+
+// KM por-OS (Opção 2, 06/08): se o técnico usa veículo hoje, a OS
+// nova passa pela tela de KM antes de iniciar. Sem veículo, segue o
+// fluxo antigo (iniciarOSComGeo, sem KM).
+function confirmarIniciarOS(os) {
+  if (!confirm('Iniciar OS ' + os.id + ' para ' + os.cliente + '?')) return;
+  APP.osParaIniciar = os;
+  if (!APP.usaVeiculoHoje) {
+    _iniciarOSDeVerdade(os, null, null);
+    return;
+  }
+  document.getElementById('iniciar-km-cliente').textContent = os.cliente + ' - ' + os.id;
+  document.getElementById('iniciar-km-input').value = '';
+  document.getElementById('iniciar-km-justificativa').value = '';
+  document.getElementById('iniciar-km-desvio-bloco').style.display = 'none';
+  document.getElementById('km-desvio-foto-status').textContent = 'Nenhuma foto enviada ainda';
+  document.getElementById('km-desvio-foto-status').style.color = 'var(--gray)';
+  APP.kmDesvioFotoUrl = ''; APP.telaKmModo = 'iniciar';
+  showScreen('scr-iniciar-km');
+  setTimeout(() => document.getElementById('iniciar-km-input').focus(), 100);
+}
+
+function confirmarKMInicial() {
+  const km = document.getElementById('iniciar-km-input').value.trim();
+  if (!km) { toast('Informe o KM do odometro', true); return; }
+  const os = APP.osParaIniciar;
+  const veiculoId = APP.veiculo ? APP.veiculo.placa : '';
+  const justificativa = document.getElementById('iniciar-km-justificativa').value.trim();
+  _iniciarOSDeVerdade(os, km, veiculoId, justificativa, APP.kmDesvioFotoUrl);
+}
+
+// Helper interno usado pelos dois fluxos (com e sem veiculo hoje).
+// CORREÇÃO (05/08, ao aplicar): o pacote original chamava sempre
+// iniciarOSComKM, mesmo sem veiculo (km=null) — mas
+// validarESalvarKMInicial faz parseFloat(null)||0 e grava
+// KM_Inicial_OS=0 incondicionalmente, o que poluiria toda OS de quem
+// nao usa veiculo E faria essa OS aparecer no banner de "falta KM
+// final" (getOSsPendentesKMFinal só pula '' /null, não 0). Sem km,
+// usa o caminho antigo (iniciarOSComGeo) que nunca toca KM_Inicial_OS
+// — é o que o comentario "fluxo antigo, sem KM" já prometia.
+function _iniciarOSDeVerdade(os, km, veiculoId, justificativa, fotoDesvioUrl) {
+  showLoading('Capturando localizacao...');
+  capturarGeolocalizacao((lat, lng) => {
+    showLoading('Iniciando OS...');
+    const semKm = km === null || km === undefined || km === '';
+    const chamada = semKm
+      ? gsCallIdempotente('iniciarOSComGeo',
+          (opId, devId) => [os.id, APP.tecnico.id, APP.tecnico.nome, '', lat, lng, opId, devId],
+          { enfileiravelSeOffline: true, tipoOperacao: 'APONTAMENTO', osId: os.id })
+      : gsCallIdempotente('iniciarOSComKM',
+          (opId, devId) => [os.id, APP.tecnico.id, APP.tecnico.nome, '', lat, lng, km, veiculoId, justificativa, fotoDesvioUrl || '', opId, devId],
+          { enfileiravelSeOffline: true, tipoOperacao: 'KM', osId: os.id });
+    chamada
+      .then(res => {
+        hideLoading();
+        if (res.erro) { toast(mensagemRecusa(res, 'iniciar a OS'), true); return; }
+        if (res.exigeJustificativa) {
+          document.getElementById('iniciar-km-desvio-bloco').style.display = 'block';
+          document.getElementById('iniciar-km-desvio-msg').textContent = res.mensagem;
+          toast('Diferenca de KM detectada — justifique abaixo', true);
+          return;
+        }
+        APP.osAtiva = os; os.horaInicio = res.hora || '--:--'; os.statusAtual = 'Em andamento';
+        toast(res.offline ? 'OS iniciada (offline)' : 'OS iniciada as ' + res.hora + (lat ? ' GPS ok' : ''));
+        carregarHome();
+      }).catch(err => { hideLoading(); toast('Erro ao iniciar OS: ' + err.message, true); });
+  });
+}
+
+// ================================================================
+// OS ATIVA
+// ================================================================
+function irParaOsAtiva() {
+  if (!APP.osAtiva) return;
+  const os = APP.osAtiva;
+  document.getElementById('ativa-id').textContent = os.id;
+  document.getElementById('ativa-cliente').textContent = os.cliente || '';
+  document.getElementById('ativa-desc').textContent = os.descricao || '';
+  document.getElementById('ativa-realizado').textContent = os.qtdRealizada || 0;
+  document.getElementById('ativa-meta').textContent = os.metaDia || 0;
+  document.getElementById('ativa-unidade').textContent = os.unidadeMeta || 'Realizado';
+  const pct = os.pctAcumulado || 0;
+  document.getElementById('ativa-pct').textContent = pct + '%';
+  document.getElementById('ativa-progress').style.width = pct + '%';
+  showScreen('scr-os-ativa');
+}
+
+// ================================================================
+// PAUSAR
+// ================================================================
+function irParaPausar() {
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  document.getElementById('pausar-id').textContent = os.id + ' - ' + os.cliente;
+  APP.motivoSelecionado = null;
+  document.querySelectorAll('.motivo-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('pausar-outro-grupo').style.display = 'none';
+  document.getElementById('btn-confirmar-pausa').disabled = true;
+  document.getElementById('btn-confirmar-pausa').style.opacity = '.5';
+  showScreen('scr-pausar');
+}
+function selecionarMotivo(motivo) {
+  APP.motivoSelecionado = motivo;
+  document.querySelectorAll('.motivo-btn').forEach(b => {
+    b.classList.toggle('selected', b.getAttribute('onclick') && b.getAttribute('onclick').includes("'" + motivo + "'"));
+  });
+  document.getElementById('pausar-outro-grupo').style.display = motivo === 'Outro' ? 'block' : 'none';
+  const btn = document.getElementById('btn-confirmar-pausa');
+  btn.disabled = false; btn.style.opacity = '1';
+}
+function confirmarPausa() {
+  let motivo = APP.motivoSelecionado;
+  if (motivo === 'Outro') {
+    const txt = document.getElementById('pausar-outro-texto').value.trim();
+    if (!txt) { toast('Descreva o motivo', true); return; }
+    motivo = txt;
+  }
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  showLoading('Pausando OS...');
+  pararCronometro();
+  salvarTimerLS(os.id, null, 0, true);
+  gsCallIdempotente('pausarOS',
+    (opId, devId) => [os.id, APP.tecnico.id, APP.tecnico.nome, motivo, '', opId, devId],
+    { enfileiravelSeOffline: true, tipoOperacao: 'APONTAMENTO', osId: os.id })
+    .then(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      APP.osPausada = { ...os, emPausa: true, motivoPausa: motivo, horasProdutivas: res.horasAcumuladas };
+      APP.osAtiva = null;
+      toast(res.offline ? 'Pausada (offline)' : 'Pausada - ' + res.horasAcumuladas + ' produtivos');
+      irParaPausada();
+    }).catch(() => { hideLoading(); toast('Erro ao pausar', true); });
+}
+
+// ================================================================
+// PAUSADA
+// ================================================================
+function irParaPausada() {
+  if (!APP.osPausada) return;
+  const os = APP.osPausada;
+  document.getElementById('pausada-id').textContent = os.id + ' - ' + os.cliente;
+  document.getElementById('pausada-motivo').textContent = os.motivoPausa || 'Pausada';
+  document.getElementById('pausada-horas').textContent = os.horasProdFormatadas || os.horasProdutivas || '0h00';
+  showScreen('scr-pausada');
+}
+function confirmarRetomar() {
+  if (!APP.osPausada) return;
+  const os = APP.osPausada;
+  showLoading('Retomando OS...');
+  gsCallIdempotente('retomarOS',
+    (opId, devId) => [os.id, APP.tecnico.id, APP.tecnico.nome, opId, devId],
+    { enfileiravelSeOffline: true, tipoOperacao: 'APONTAMENTO', osId: os.id })
+    .then(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      APP.osAtiva = { ...os, emPausa: false, statusAtual: 'Em andamento' };
+      APP.osPausada = null;
+      toast(res.offline ? 'Retomada (offline)' : 'OS retomada as ' + res.hora);
+      iniciarCronometro(0);
+      irParaOsAtiva();
+    }).catch(() => { hideLoading(); toast('Erro ao retomar', true); });
+}
+
+// ================================================================
+// EMERGENCIA
+// ================================================================
+function irParaEmergencia() {
+  document.getElementById('emg-desc').value = '';
+  document.getElementById('emg-local').value = '';
+  showScreen('scr-emergencia');
+}
+// Achado real (15/08, revisão dos ~12 call sites "ainda-implícitos"
+// pedida pelo dono): esta função ainda usava gsCall PURO -- dados nunca
+// incluía operationId/dispositivoId, apesar do backend real
+// (pwa/Código.js:2091-2094) já ler dados.operationId/dados.dispositivoId
+// e envolver em executarIdempotente desde a rodada documentada em
+// DIRETRIZ-V1.1-FRENTES-BCDE.md (commit de backend 6889b60) -- o mesmo
+// padrão de trabalho documentado como concluído mas nunca aplicado
+// nesta branch que já apareceu com e46a925 (AUDITORIA-TOCTOU-FRONTEND.md).
+// Sem operationId, todo retry (rede lenta, fila offline) cria uma
+// SEGUNDA OS de emergência de verdade -- pior que os outros ~12 (que ao
+// menos já tinham gsCallIdempotente): aqui não havia nem o dedup do
+// backend nem a persistência de D7-08. Ganha os dois: gsCallIdempotente
+// (dedup real) + lock explícito (é criação de registro novo, tão
+// crítica quanto os 3 botões já endurecidos hoje).
+function confirmarEmergencia() {
+  if (acaoCriticaEmAndamento('criarEmergencia')) return;
+  const desc = document.getElementById('emg-desc').value.trim();
+  const local = document.getElementById('emg-local').value.trim();
+  if (!desc) { toast('Descreva o problema', true); return; }
+  const osOrigem = APP.osAtiva || APP.osPausada;
+  const dadosBase = {
+    descricao: desc, local: local, tecnicoId: APP.tecnico.id, tecnicoNome: APP.tecnico.nome,
+    clienteId: osOrigem ? osOrigem.clienteId || '' : '', clienteNome: osOrigem ? osOrigem.cliente : '',
+    osOrigemId: osOrigem ? osOrigem.id : ''
+  };
+  travarAcaoCritica('criarEmergencia');
+  showLoading('Criando OS emergencia...');
+  pararCronometro();
+  const pausarPrimeiro = !!APP.osAtiva;
+  const criar = () => {
+    gsCallIdempotente('criarOSEmergencia',
+      (opId, devId) => [Object.assign({}, dadosBase, { operationId: opId, dispositivoId: devId })],
+      { enfileiravelSeOffline: true, tipoOperacao: 'APONTAMENTO', osId: '' })
+      .then(res => {
+        destravarAcaoCritica('criarEmergencia');
+        hideLoading();
+        if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+        const novaOS = { id: res.osId, cliente: dadosBase.clienteNome, descricao: desc, statusAtual: 'Em andamento',
+                         emPausa: false, horasProdutivas: 0, horaInicio: res.hora, prioridade: 'Emergencia' };
+        if (pausarPrimeiro && APP.osAtiva) APP.osPausada = { ...APP.osAtiva, emPausa: true, motivoPausa: 'OS Emergencia' };
+        APP.osAtiva = novaOS;
+        toast('OS ' + res.osId + ' criada');
+        iniciarCronometro(0);
+        irParaOsAtiva();
+      }).catch(() => { destravarAcaoCritica('criarEmergencia'); hideLoading(); toast('Erro ao criar emergencia', true); });
+  };
+  if (pausarPrimeiro && APP.osAtiva) {
+    gsCallIdempotente('pausarOS',
+      (opId, devId) => [APP.osAtiva.id, APP.tecnico.id, APP.tecnico.nome, 'OS Emergencia', '', opId, devId],
+      { enfileiravelSeOffline: true, tipoOperacao: 'APONTAMENTO', osId: APP.osAtiva.id })
+      .then(() => { APP.osPausada = {...APP.osAtiva, emPausa:true, motivoPausa:'OS Emergencia'}; APP.osAtiva = null; criar(); })
+      .catch(() => criar());
+  } else { criar(); }
+}
+
+// ================================================================
+// CHECKLIST DA OS EM 3 FASES — Frente B, fatia 3 (Diretriz v1.1)
+// Pré-Execução -> Execução -> Pós-Execução(Encerramento), como
+// sequência obrigatória, não mais 3 pontos soltos e sem relação entre
+// si (segurança era um card de checkboxes na tela de encerrar; o
+// checklist de execução (CHKV2/CHK) era um botão à parte, sem ordem
+// nem trava com nada; e o encerramento não sabia de nenhum dos dois).
+//
+// Fase 1 (esta seção) substitui os 4 checkboxes soltos por perguntas
+// reais, uma de cada vez, com o mesmo tratamento de bloqueio por
+// pendência que o resto do checklist já usa.
+//
+// ✅ BARREIRA SERVER-SIDE REAL (fechada em 15/08, achado P0 cross-front
+// -- LEVANTAMENTO-CALL-SITES-TOKEN-SESSAO.md/AUDITORIA-TOCTOU-FRONTEND.md):
+// até esta correção, a sequência Fase 1 -> Fase 2 -> Fase 3 era 100%
+// CLIENT-SIDE -- Fase 1 chamava confirmarSegurancaPreExecucao (interim,
+// não sabia que "Fase 2 completada" era um conceito) e Fase 2
+// (concluirChecklist) só gravava localStorage, NENHUMA chamada de rede.
+// canCloseOS (Frente C) já tinha um 5º motivo fail-closed exatamente
+// sobre isso (Checklist_Execucao_Completo), mas nada nunca o
+// satisfazia -- nenhuma OS que passasse pelo checklist 3 fases
+// conseguia fechar por este frontend, mesmo com tudo mais correto.
+// Corrigido: Fase 1 agora chama fecharFaseChecklist('Pré-Execução', ...)
+// (substitui confirmarSegurancaPreExecucao como escritor real de
+// Estado_Seguranca, exatamente como o contrato original já anunciava);
+// Fase 2 chama fecharFaseChecklist('Execução', ...) via
+// _fecharFase2Execucao (compartilhada pelos motores CHKV2 e CHK legado)
+// -- grava Checklist_Execucao_Completo=true de verdade. canCloseOS
+// agora reconhece as duas fases sem mudança nenhuma do lado dele (a
+// coluna já existia, só nada gravava nela).
+//
+// Estado de fase continua também local (localStorage, por OS_ID) --
+// troca de aparelho ou limpeza de dados ainda reseta a Fase 1/2 do
+// PONTO DE VISTA DO APP (o servidor lembra, o app local não pergunta
+// -- consultarFaseChecklist existe pra isso mas ainda não é chamado
+// neste frontend; sinalizado, não implementado nesta rodada, é
+// melhoria de robustez separada do achado P0 fechado aqui).
+// ================================================================
+const POOL_PRE_EXECUCAO = {
+  PRE_EPI:         { texto: 'EPI utilizado corretamente?',    chave: 'epi',             ordem: 1 },
+  PRE_ATERRAMENTO: { texto: 'Aterramento verificado?',        chave: 'aterramento',      ordem: 2 },
+  PRE_BLOQUEIO:    { texto: 'Bloqueio de energia realizado?', chave: 'bloqueio_energia', ordem: 3 },
+  PRE_SINALIZACAO: { texto: 'Área sinalizada?',               chave: 'sinalizacao_area', ordem: 4 },
+};
+const ORDEM_PRE_EXECUCAO = Object.keys(POOL_PRE_EXECUCAO).sort((a, b) => POOL_PRE_EXECUCAO[a].ordem - POOL_PRE_EXECUCAO[b].ordem);
+
+const CHK3F = {
+  osId: null, idx: 0, respostas: {}, temNCAdicional: false, perguntaNCAdicional: false,
+
+  _stateKey(osId) { return 'eletrium_chk3f_' + osId; },
+  lerEstado(osId) {
+    try { return JSON.parse(localStorage.getItem(this._stateKey(osId))) || { fase1: null, fase2: null }; }
+    catch (e) { return { fase1: null, fase2: null }; }
+  },
+  salvarEstado(osId, estado) { localStorage.setItem(this._stateKey(osId), JSON.stringify(estado)); },
+
+  // Entrada única do fluxo: decide em qual fase a OS está localmente e
+  // mostra a tela certa -- Fase 1 se ainda não completa, senão Fase 2.
+  iniciar(os) {
+    this.osId = os.id;
+    const estado = this.lerEstado(os.id);
+    document.getElementById('chk-loading').style.display = 'none';
+    document.getElementById('chk-f1-block').style.display = 'none';
+    document.getElementById('chk-pergunta-block').style.display = 'none';
+    document.getElementById('chk-v2-block').style.display = 'none';
+    document.getElementById('chk-resumo-block').style.display = 'none';
+    document.getElementById('chk-v2-erro-versao').style.display = 'none';
+
+    if (!estado.fase1 || !estado.fase1.completo) {
+      this.idx = 0; this.respostas = {}; this.temNCAdicional = false; this.perguntaNCAdicional = false;
+      document.getElementById('chk-progresso').textContent = 'Fase 1 de 3 — Pré-Execução';
+      this.renderizarPerguntaFase1();
+      return;
+    }
+    document.getElementById('chk-progresso').textContent = 'Fase 2 de 3 — Execução';
+    _iniciarFaseExecucao(os);
+  },
+
+  renderizarPerguntaFase1() {
+    if (this.perguntaNCAdicional) { this._renderizarPerguntaNCAdicional(); return; }
+    if (this.idx >= ORDEM_PRE_EXECUCAO.length) { this.perguntaNCAdicional = true; this._renderizarPerguntaNCAdicional(); return; }
+    const id = ORDEM_PRE_EXECUCAO[this.idx];
+    document.getElementById('chk-f1-titulo').textContent = 'Pré-Execução — item ' + (this.idx + 1) + ' de ' + ORDEM_PRE_EXECUCAO.length;
+    document.getElementById('chk-f1-texto').textContent = POOL_PRE_EXECUCAO[id].texto;
+    document.getElementById('chk-f1-alerta').style.display = 'none';
+    document.getElementById('chk-f1-block').style.display = 'block';
+  },
+
+  _renderizarPerguntaNCAdicional() {
+    document.getElementById('chk-f1-titulo').textContent = 'Pré-Execução — verificação final';
+    document.getElementById('chk-f1-texto').textContent = 'Foi identificada alguma não conformidade adicional durante a verificação de segurança?';
+    document.getElementById('chk-f1-alerta').style.display = 'none';
+    document.getElementById('chk-f1-block').style.display = 'block';
+  },
+
+  responder(valor) {
+    if (this.perguntaNCAdicional) { this.temNCAdicional = valor; this._finalizarFase1(); return; }
+    const id = ORDEM_PRE_EXECUCAO[this.idx];
+    if (!valor) {
+      document.getElementById('chk-f1-alerta').textContent =
+        'Sem "' + POOL_PRE_EXECUCAO[id].texto.replace('?', '') + '" confirmado, a Fase 1 não pode ser concluída. Resolva a pendência e responda novamente.';
+      document.getElementById('chk-f1-alerta').style.display = 'block';
+      return;
+    }
+    this.respostas[id] = true;
+    this.idx++;
+    this.renderizarPerguntaFase1();
+  },
+
+  _finalizarFase1() {
+    const os = APP.osAtiva || APP.osPausada;
+    showLoading('Confirmando segurança...');
+    // Auditoria por pergunta -- mesma salvarResposta genérica que o
+    // resto do checklist já usa (Frente D: enfileiravelSeOffline se sem
+    // sinal), sem tocar em nada no backend.
+    const chamadasRespostas = ORDEM_PRE_EXECUCAO.map(id =>
+      gsCallIdempotente('salvarResposta', (opId, devId) => [os.id, os.idSharePoint || '', id, POOL_PRE_EXECUCAO[id].texto, 'Sim', '', APP.tecnico.nome, false, opId, devId, APP.tecnico.id], { enfileiravelSeOffline: true, tipoOperacao: 'CHECKLIST', osId: os.id })
+    );
+    chamadasRespostas.push(
+      gsCallIdempotente('salvarResposta', (opId, devId) => [os.id, os.idSharePoint || '', 'PRE_NC_ADICIONAL', 'Não conformidade adicional na verificação de segurança?', this.temNCAdicional ? 'Sim' : 'Não', '', APP.tecnico.nome, this.temNCAdicional, opId, devId, APP.tecnico.id], { enfileiravelSeOffline: true, tipoOperacao: 'CHECKLIST', osId: os.id })
+    );
+
+    // P0 (15/08, achado cross-front, ver LEVANTAMENTO-CALL-SITES-TOKEN-
+    // SESSAO.md): fecharFaseChecklist substitui confirmarSegurancaPreExecucao
+    // como escritor REAL de Estado_Seguranca -- o comentário do próprio
+    // backend já anunciava essa troca desde que o checklist 3 fases
+    // fosse portado (é o CHK3F), mas a troca nunca tinha sido feita
+    // nesta branch. Promise.all espera as 5 respostas resolverem
+    // (sucesso ao vivo OU enfileiradas -- gsCallIdempotente nunca
+    // rejeita com enfileiravelSeOffline:true) ANTES de perguntar ao
+    // servidor se a fase fecha -- fecharFaseChecklist só enxerga
+    // Checklist_Respostas já gravadas; perguntar cedo demais devolveria
+    // "incompleta" mesmo com o técnico tendo respondido tudo. Se ficar
+    // offline, a MESMA ordem de inserção no outbox (respostas primeiro,
+    // fecharFaseChecklist depois) garante que o retry sincroniza na
+    // ordem certa quando a conexão voltar (processarFilaOffline() é
+    // FIFO).
+    Promise.all(chamadasRespostas).then(() => {
+      return gsCallIdempotente(
+        'fecharFaseChecklist',
+        (opId, devId) => [os.id, APP.tecnico.id, 'Pré-Execução', opId, devId],
+        { enfileiravelSeOffline: true, tipoOperacao: 'CHECKLIST', osId: os.id }
+      );
+    }).then(r => {
+      hideLoading();
+      const estado = this.lerEstado(os.id);
+      estado.fase1 = {
+        completo: true,
+        estadoSeguranca: r.offline ? 'Pendente (offline)' : (r.completa === true ? (r.estado || '') : 'Erro'),
+        pendenteSincronizacao: !!r.offline,
+      };
+      this.salvarEstado(os.id, estado);
+      if (!r.offline && r.completa !== true) {
+        // Mesmo padrao de mensagemRecusa (blocking_reasons + retryable)
+        // ja usado no resto do checklist -- nunca mostra frase generica.
+        // Não trava a navegação (o app local não tem mais nada a pedir
+        // pro técnico) -- a barreira real fica em canCloseOS, que só
+        // libera fechamento se Estado_Seguranca de fato foi gravado.
+        toast(mensagemRecusa(r, 'fechar a fase de segurança'), true);
+      }
+      document.getElementById('chk-progresso').textContent = 'Fase 2 de 3 — Execução';
+      _iniciarFaseExecucao(os);
+    }).catch(err => {
+      hideLoading();
+      toast('Erro ao fechar a fase de segurança: ' + err.message, true);
+    });
+  }
+};
+
+// ================================================================
+// CHECKLIST VERSIONADO (Fat-Client, 06/08/2026) — dados fixos no
+// bundle, sem round-trip por pergunta. Ver Checklist_Versionado.js
+// (pwa/) para a origem/rastreabilidade completa deste bloco.
+// ================================================================
+// REDESENHO 10/08 — motor trocado de "lista plana por fase" para
+// TREE-WALK CONDICIONAL, espelhando getProximaPergunta() real (Código.js
+// linha ~725): próxima pergunta = primeiro FILHO ativo da pergunta atual
+// cujo condicaoExibicao bate com a resposta dada (ou sem condição),
+// ordenado por ordem. Sem filho batendo = fim do checklist.
+//
+// ⚠️ pai/condicaoExibicao/tipoResposta/fotoObrigatoria/ordem abaixo SÃO
+// RECONSTRUÇÃO POR INFERÊNCIA (nome dos IDs + agrupamento original), NÃO
+// dado real — ver Checklist_Versionado.js (pwa/) para o aviso completo e
+// a árvore comentada por ramo. PUBLICAÇÃO PAUSADA até confirmar contra
+// Get-PnPListItem de Perguntas_Checklist/Opcoes_Resposta.
+const CHECKLIST_VERSION_ATUAL = 'v1.0';
+const POOL_PERGUNTAS = {
+  "N3_TIPO": { texto: "Tipo de Serviço", tipoResposta: "Unica", fotoObrigatoria: false, pai: null, condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Reaperto de Conexoes", nc: false }, { label: "Limpeza/Adequacao de Painel", nc: false },
+    { label: "Diagnostico de Falha", nc: false }, { label: "Instalacao de Componente", nc: false },
+    { label: "Medicao Eletrica", nc: false }, { label: "Adequacao de Seguranca NR-10", nc: false } ] },
+  "N4_REAP_ANOM": { texto: "Anomalia (Reaperto)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N3_TIPO", condicaoExibicao: "Reaperto de Conexoes", ordem: 1, opcoes: [
+    { label: "Oxidacao", nc: false }, { label: "Frouxidao", nc: false },
+    { label: "Sobreaquecimento visivel", nc: false }, { label: "Rompimento parcial de fio", nc: false } ] },
+  "N4_REAP_TORQ": { texto: "Torque (Reaperto)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_REAP_ANOM", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Sim", nc: false }, { label: "Nao-ajustado durante o servico", nc: false } ] },
+  "N4_REAP_ACAO": { texto: "Ação (Reaperto)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_REAP_TORQ", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Reaperto realizado", nc: false }, { label: "Substituicao de terminal", nc: false },
+    { label: "Substituicao de cabo", nc: false } ] },
+  "N4_REAP_EST": { texto: "Estado do Reaperto", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_REAP_ACAO", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Conforme-preventivo", nc: false }, { label: "Nao conforme-frouxidao/oxidacao severa", nc: true } ] },
+  "N4_LIMP_TIPO": { texto: "Tipo de Limpeza", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N3_TIPO", condicaoExibicao: "Limpeza/Adequacao de Painel", ordem: 2, opcoes: [
+    { label: "Limpeza a seco", nc: false }, { label: "Limpeza com produto especifico", nc: false },
+    { label: "Aspiracao de residuos", nc: false } ] },
+  "N4_LIMP_ADEQ": { texto: "Adequação (Limpeza)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_LIMP_TIPO", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Identificacao de circuitos", nc: false }, { label: "Sinalizacao de seguranca", nc: false },
+    { label: "Vedacao de aberturas", nc: false }, { label: "Organizacao de cabos", nc: false },
+    { label: "Nenhuma adequacao adicional", nc: false } ] },
+  "N4_LIMP_EST": { texto: "Estado da Limpeza", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_LIMP_ADEQ", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Conforme", nc: false }, { label: "Nao conforme-poeira", nc: true },
+    { label: "Nao conforme-umidade/corrosao", nc: true }, { label: "Nao conforme-insetos/roedores", nc: true } ] },
+  "N4_DIAG_SINT": { texto: "Sintoma (Diagnóstico)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N3_TIPO", condicaoExibicao: "Diagnostico de Falha", ordem: 3, opcoes: [
+    { label: "Painel nao energiza", nc: false }, { label: "Disjuntor desarma", nc: false },
+    { label: "Ruido anormal", nc: false }, { label: "Odor de queimado", nc: false },
+    { label: "Faisca/centelhamento", nc: false }, { label: "Outro", nc: false } ] },
+  "N4_DIAG_CAUSA": { texto: "Causa (Diagnóstico)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_DIAG_SINT", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Curto-circuito", nc: false }, { label: "Sobrecarga", nc: false },
+    { label: "Falha de isolamento", nc: false }, { label: "Componente danificado", nc: false },
+    { label: "Falha de conexao", nc: false }, { label: "Nao identificada", nc: false } ] },
+  "N4_DIAG_COMP": { texto: "Componente (Diagnóstico)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_DIAG_CAUSA", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Disjuntor", nc: false }, { label: "Contator", nc: false }, { label: "Rele", nc: false },
+    { label: "Transformador", nc: false }, { label: "Barramento", nc: false },
+    { label: "Cabo", nc: false }, { label: "Fonte", nc: false } ] },
+  "N4_DIAG_ACAO": { texto: "Ação (Diagnóstico)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_DIAG_COMP", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Reparo imediato", nc: false }, { label: "Substituicao de componente", nc: false },
+    { label: "Isolamento da area", nc: false }, { label: "Intervencao programada", nc: false } ] },
+  "N4_INST_COMP": { texto: "Componente (Instalação)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N3_TIPO", condicaoExibicao: "Instalacao de Componente", ordem: 4, opcoes: [
+    { label: "Disjuntor", nc: false }, { label: "DPS", nc: false }, { label: "Contator", nc: false },
+    { label: "Rele", nc: false }, { label: "Fusivel", nc: false }, { label: "Barramento", nc: false },
+    { label: "Botoeira", nc: false }, { label: "Sinalizador", nc: false } ] },
+  "N4_INST_TESTE": { texto: "Teste de Instalação", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_INST_COMP", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Aprovado", nc: false }, { label: "Reprovado-nova tentativa", nc: true },
+    { label: "Reprovado-escalado p/ engenharia", nc: true } ] },
+  "N4_MED_TIPO": { texto: "Tipo de Medição", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N3_TIPO", condicaoExibicao: "Medicao Eletrica", ordem: 5, opcoes: [
+    { label: "Tensao", nc: false }, { label: "Corrente", nc: false },
+    { label: "Resistencia de isolamento", nc: false }, { label: "Resistencia de aterramento", nc: false },
+    { label: "Continuidade", nc: false } ] },
+  "N4_MED_RES": { texto: "Resultado da Medição", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_MED_TIPO", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Dentro da norma", nc: false }, { label: "Fora da norma-acao corretiva", nc: true },
+    { label: "Fora da norma-area isolada", nc: true } ] },
+  "N4_SEG_ITEM": { texto: "Item de Segurança", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N3_TIPO", condicaoExibicao: "Adequacao de Seguranca NR-10", ordem: 6, opcoes: [
+    { label: "Sinalizacao de risco eletrico", nc: false }, { label: "Bloqueio e etiquetagem(LOTO)", nc: false },
+    { label: "Aterramento temporario", nc: false }, { label: "Distancia de seguranca", nc: false },
+    { label: "EPI coletivo disponivel", nc: false } ] },
+  "N4_SEG_CONF": { texto: "Conformidade (Segurança)", tipoResposta: "Unica", fotoObrigatoria: false, pai: "N4_SEG_ITEM", condicaoExibicao: null, ordem: 1, opcoes: [
+    { label: "Conforme", nc: false }, { label: "Nao conforme-acao corretiva aplicada", nc: true },
+    { label: "Nao conforme-intervencao programada", nc: true } ] }
+};
+const VERSIONS = { "v1.0": { raizes: ["N3_TIPO"] } };
+
+// Motor novo (fat-client, tree-walk). Se a OS não trouxer checklist_version
+// reconhecida, irParaChecklist() cai no fluxo antigo (getProximaPergunta ao
+// vivo) em vez de travar a tela: republicar o backend antes do frontend
+// evita isso, mas se acontecer fora de ordem o checklist não para de
+// funcionar pros técnicos.
+const CHKV2 = {
+  perguntaAtualId: null, osId: null, idSharePointOS: null, respostas: [], temNC: false,
+
+  inicializar(os) {
+    this.osId = os.id; this.idSharePointOS = os.idSharePoint || '';
+    this.perguntaAtualId = null; this.respostas = []; this.temNC = false;
+    const versao = VERSIONS[os.checklist_version];
+    if (!versao || !versao.raizes || !versao.raizes.length) throw new Error('Versao ' + os.checklist_version + ' sem raizes definidas.');
+    this._raizes = versao.raizes;
+    this._avancarPara(this._proximaPergunta(null, null));
+  },
+
+  // Espelha getProximaPergunta(): filhos ativos de perguntaAtualId cuja
+  // condicaoExibicao bate com respostaDada (ou sem condicao), por ordem.
+  _proximaPergunta(perguntaAtualId, respostaDada) {
+    let candidatas;
+    if (!perguntaAtualId) {
+      candidatas = this._raizes.slice();
+    } else {
+      candidatas = Object.keys(POOL_PERGUNTAS).filter(id => {
+        const p = POOL_PERGUNTAS[id];
+        if (p.pai !== perguntaAtualId) return false;
+        if (p.condicaoExibicao != null && p.condicaoExibicao !== respostaDada) return false;
+        return true;
+      });
+    }
+    if (!candidatas.length) return null;
+    candidatas.sort((a, b) => (POOL_PERGUNTAS[a].ordem || 0) - (POOL_PERGUNTAS[b].ordem || 0));
+    const id = candidatas[0];
+    if (!POOL_PERGUNTAS[id]) throw new Error('Pergunta ' + id + ' nao encontrada no POOL.');
+    return id;
+  },
+
+  _avancarPara(perguntaId) {
+    if (!perguntaId) { this.finalizar(); return; }
+    this.perguntaAtualId = perguntaId;
+    this.renderizarPergunta(perguntaId);
+  },
+
+  renderizarPergunta(perguntaId) {
+    const p = POOL_PERGUNTAS[perguntaId];
+    document.getElementById('chk-progresso').textContent = 'Pergunta ' + (this.respostas.length + 1);
+    document.getElementById('chk-v2-fase-titulo').textContent = 'Pergunta ' + (this.respostas.length + 1);
+    document.getElementById('chk-v2-btn-avancar').textContent = 'CONFIRMAR';
+    const opcoesHtml = p.opcoes.map((op, i) =>
+      '<label style="display:flex;align-items:center;gap:12px;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;cursor:pointer">' +
+      '<input type="radio" name="chkv2_' + perguntaId + '" value="' + i + '" data-nc="' + (op.nc ? '1' : '0') + '" ' +
+        'onchange="CHKV2.onResponder(\'' + perguntaId + '\')" style="width:20px;height:20px;accent-color:var(--green)">' +
+      '<span style="font-size:15px;color:var(--text)">' + op.label + '</span></label>'
+    ).join('');
+    document.getElementById('chk-v2-perguntas').innerHTML =
+      '<div class="card" style="margin-bottom:14px" id="chk-v2-card-' + perguntaId + '">' +
+        '<div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:10px">' + p.texto + '</div>' +
+        opcoesHtml +
+        '<div id="chk-v2-nc-' + perguntaId + '" style="display:none;margin-top:6px">' +
+          '<div class="alert alert-warn" style="margin-bottom:8px">Nao conformidade detectada nesta resposta.</div>' +
+          '<textarea class="form-textarea" id="chk-v2-just-' + perguntaId + '" placeholder="Justificativa (obrigatoria)"></textarea>' +
+          '<div class="alert alert-warn" style="margin-top:8px">Foto do item tambem obrigatoria — captura ainda nao disponivel nesta versao do app. Enquanto isso, esta pergunta nao pode ser confirmada como NC.</div>' +
+        '</div></div>';
+    document.getElementById('chk-v2-erro-versao').style.display = 'none';
+    document.getElementById('chk-v2-block').style.display = 'block';
+    document.getElementById('chk-pergunta-block').style.display = 'none';
+    document.getElementById('chk-resumo-block').style.display = 'none';
+    document.getElementById('chk-loading').style.display = 'none';
+  },
+
+  onResponder(perguntaId) {
+    const marcado = document.querySelector('input[name="chkv2_' + perguntaId + '"]:checked');
+    const nc = marcado && marcado.dataset.nc === '1';
+    document.getElementById('chk-v2-nc-' + perguntaId).style.display = nc ? 'block' : 'none';
+  },
+
+  // Chamado pelo botão "CONFIRMAR" (mantém o nome tentarAvancarFase por
+  // compatibilidade com o onclick já gravado na tela — só troca o corpo).
+  tentarAvancarFase() {
+    const p = POOL_PERGUNTAS[this.perguntaAtualId];
+    const marcado = document.querySelector('input[name="chkv2_' + this.perguntaAtualId + '"]:checked');
+    if (!marcado) { toast('Selecione uma opcao', true); return; }
+    const opcao = p.opcoes[Number(marcado.value)];
+    if (opcao.nc) {
+      // Foto nunca existe no app hoje — NC fica permanentemente bloqueada
+      // ate a captura de foto ser construida (limitacao conhecida, mesmo
+      // tratamento do KM por-OS).
+      toast('NC em "' + p.texto + '" exige foto do item, que este app ainda nao captura — nao e possivel avancar', true);
+      return;
+    }
+    this.respostas.push({ perguntaId: this.perguntaAtualId, texto: p.texto, resposta: opcao.label, nc: opcao.nc });
+    this._avancarPara(this._proximaPergunta(this.perguntaAtualId, opcao.label));
+  },
+
+  finalizar() {
+    showLoading('Salvando checklist...');
+    // Migrado de gsCall pra gsCallIdempotente (achado real, 13/08) --
+    // mesmo motivo do _finalizarFase1: sem operationId, Outbox nunca
+    // recebe CHECKLIST e o retry offline duplicava sem protecao.
+    const chamadas = this.respostas.map(r =>
+      gsCallIdempotente('salvarResposta', (opId, devId) => [this.osId, this.idSharePointOS, r.perguntaId, r.texto, r.resposta, '', APP.tecnico.nome, r.nc, opId, devId, APP.tecnico.id], { enfileiravelSeOffline: true, tipoOperacao: 'CHECKLIST', osId: this.osId })
+    );
+    CHK.totalRespostas = this.respostas.length;
+    CHK.temNC = this.respostas.some(r => r.nc);
+    // P0 (15/08, achado cross-front): fecha a Fase 2 no backend de
+    // verdade -- ver _fecharFase2Execucao (compartilhada com o motor
+    // legado CHK) e o comentário completo em _finalizarFase1 sobre por
+    // que o Promise.all precisa vir ANTES de perguntar ao servidor.
+    // PULADO de propósito na auditoria de mensagens (12/08): o catch
+    // deste Promise.all pega a rejeição da 1ª promise que falhou dentre
+    // N chamadas independentes de salvarResposta em paralelo -- cada
+    // uma já usa enfileiravelSeOffline (resolve com {offline:true} em
+    // vez de rejeitar em falha de rede), então na prática isso só
+    // dispara numa exceção JS inesperada, não numa recusa estruturada
+    // do backend -- não tem um envelope único (com blocking_reasons)
+    // pra ler aqui. mensagemRecusa não se aplica sem reestruturar pra
+    // Promise.allSettled + agregação por item, mudança de
+    // comportamento, não só de mensagem.
+    _fecharFase2Execucao(chamadas);
+  }
+};
+
+// P0 (15/08, achado cross-front, ver LEVANTAMENTO-CALL-SITES-TOKEN-
+// SESSAO.md): fecha a Fase 2 (Execução) no backend -- compartilhado
+// pelos 2 motores de checklist (CHKV2 fat-client e CHK legado ao vivo).
+// Achado real: NENHUM dos 2 motores chamava fecharFaseChecklist antes
+// desta correção -- Checklist_Execucao_Completo nunca era gravado no
+// Ordens_Servico real, e canCloseOS (5º motivo, fail-closed) nunca
+// liberava fechamento de nenhuma OS que passasse pelo checklist 3
+// fases, mesmo com Laudo/Assinatura/Segurança/Fotos corretos. Só chama
+// fecharFaseChecklist depois que TODAS as respostas da fase já
+// resolveram (mesma disciplina do _finalizarFase1 -- Promise.all antes
+// de perguntar, nunca durante uma resposta ainda em voo).
+function _fecharFase2Execucao(chamadasRespostas) {
+  const os = APP.osAtiva || APP.osPausada;
+  Promise.all(chamadasRespostas).then(() => {
+    return gsCallIdempotente(
+      'fecharFaseChecklist',
+      (opId, devId) => [os.id, APP.tecnico.id, 'Execução', opId, devId],
+      { enfileiravelSeOffline: true, tipoOperacao: 'CHECKLIST', osId: os.id }
+    );
+  }).then(r => {
+    hideLoading();
+    const estado = CHK3F.lerEstado(os.id);
+    estado.fase2 = { completo: true, temNC: CHK.temNC, pendenteSincronizacao: !!r.offline };
+    CHK3F.salvarEstado(os.id, estado);
+    if (!r.offline && r.completa !== true) {
+      // Mesma disciplina do _finalizarFase1 -- não trava a navegação
+      // (o técnico já respondeu tudo que o app local sabia pedir); a
+      // barreira real fica em canCloseOS, que só libera com
+      // Checklist_Execucao_Completo de fato gravado.
+      toast(mensagemRecusa(r, 'fechar a fase de execução'), true);
+    }
+    document.getElementById('chk-v2-block').style.display = 'none';
+    document.getElementById('chk-pergunta-block').style.display = 'none';
+    document.getElementById('chk-resumo-block').style.display = 'block';
+    document.getElementById('chk-resumo-qtd').textContent = CHK.totalRespostas + ' pergunta(s) respondida(s)';
+    document.getElementById('chk-nc-aviso').style.display = CHK.temNC ? 'block' : 'none';
+    document.getElementById('chk-progresso').textContent = 'Concluido';
+  }).catch(err => { hideLoading(); toast('Erro ao fechar a fase de execução: ' + err.message, true); });
+}
+
+// ================================================================
+// CHECKLIST NR-10 (fluxo antigo, ao vivo — mantido como fallback:
+// roda quando a OS nao traz checklist_version reconhecida, seja
+// porque o backend ainda nao foi republicado com o motor novo, seja
+// por uma versao futura que este app ainda nao conhece)
+// ================================================================
+const CHK = {
+  // disciplina: '' -- achado real (10/08): toda linha de Perguntas_Checklist
+  // tem Disciplina vazia hoje (confirmado via lerArvoreChecklist ao vivo);
+  // o valor antigo 'NR-10' nunca casava com nada e getProximaPergunta
+  // sempre devolvia null mesmo pra pergunta raiz. Nao introduzido por este
+  // fix -- achado ao testar o motor corrigido contra a planilha real.
+  osId: null, idSharePointOS: null, disciplina: '', perguntaAtualId: null,
+  textoPergunta: '', tipoResposta: '', fotoObrigatoria: false, selecionados: [],
+  geraNC: false, totalRespostas: 0, temNC: false, respostaNCPendente: null,
+  // P0 (15/08): coleta as promises de salvarResposta desta fase pra
+  // _fecharFase2Execucao esperar TODAS resolverem antes de perguntar
+  // ao servidor se a fase fecha -- ver _gravarResposta.
+  chamadasPendentes: []
+};
+
+// Entrada única do checklist da OS -- decide a fase (CHK3F.iniciar
+// olha o estado local: Fase 1 pendente, ou já feita e segue pra Fase 2).
+function irParaChecklist() {
+  const os = APP.osAtiva;
+  if (!os) { toast('Nenhuma OS ativa', true); return; }
+  showScreen('scr-checklist');
+  document.getElementById('chk-progresso').textContent = 'Carregando...';
+  document.getElementById('chk-loading').style.display = 'block';
+  CHK3F.iniciar(os);
+}
+function voltarDaChecklist() { showScreen('scr-os-ativa'); }
+
+// Fase 2 -- Execução: motor pré-existente (CHKV2 tree-walk fat-client, ou
+// CHK como fallback ao vivo quando a OS não traz checklist_version
+// reconhecida), inalterado -- só passou a ser chamado depois da Fase 1
+// estar completa localmente, em vez de ser o único passo do checklist.
+function _iniciarFaseExecucao(os) {
+  document.getElementById('chk-loading').style.display = 'block';
+  document.getElementById('chk-f1-block').style.display = 'none';
+  document.getElementById('chk-pergunta-block').style.display = 'none';
+  document.getElementById('chk-resumo-block').style.display = 'none';
+  document.getElementById('chk-v2-block').style.display = 'none';
+  document.getElementById('chk-v2-erro-versao').style.display = 'none';
+
+  if (os.checklist_version && VERSIONS[os.checklist_version]) {
+    try {
+      CHKV2.inicializar(os);
+      return;
+    } catch (e) {
+      document.getElementById('chk-loading').style.display = 'none';
+      document.getElementById('chk-v2-erro-msg').textContent =
+        'Erro ao montar o checklist versionado (' + e.message + '). Peça para o time de TI conferir Checklist_Versionado.js.';
+      document.getElementById('chk-v2-erro-versao').style.display = 'block';
+      return;
+    }
+  }
+  // Sem checklist_version reconhecida: fluxo antigo, sem qualquer bloqueio de tela.
+  CHK.osId = os.id; CHK.idSharePointOS = os.idSharePoint || '';
+  CHK.disciplina = 'NR-10'; CHK.perguntaAtualId = null; CHK.totalRespostas = 0; CHK.temNC = false;
+  CHK.chamadasPendentes = [];
+  carregarPergunta(null, null);
+}
+
+function carregarPergunta(perguntaAtualId, respostaDada) {
+  // osId como 4o parametro: o motor usa Checklist_Respostas desta OS pra
+  // saber quais irmas (mesmo Pergunta_Pai) ja foram visitadas e voltar pra
+  // elas, em vez de so olhar filhos da ultima pergunta respondida.
+  gsCall('getProximaPergunta', [CHK.disciplina, perguntaAtualId, respostaDada, CHK.osId]).then(perg => {
+    document.getElementById('chk-loading').style.display = 'none';
+    if (!perg) {
+      // P0 (15/08): fecha a Fase 2 no backend antes de mostrar o resumo
+      // -- ver _fecharFase2Execucao (compartilhada com CHKV2) e
+      // CHK.chamadasPendentes (coletadas em _gravarResposta).
+      document.getElementById('chk-pergunta-block').style.display = 'none';
+      showLoading('Fechando fase de execução...');
+      _fecharFase2Execucao(CHK.chamadasPendentes);
+      return;
+    }
+    CHK.perguntaAtualId = perg['ID_Pergunta'];
+    CHK.textoPergunta = perg['Texto_Pergunta'];
+    CHK.tipoResposta = perg['Tipo_Resposta'] || 'Unica';
+    CHK.fotoObrigatoria = perg['Foto_Obrigatoria'] === true || perg['Foto_Obrigatoria'] === 'TRUE';
+    CHK.selecionados = [];
+    document.getElementById('chk-progresso').textContent = 'Pergunta ' + (CHK.totalRespostas + 1);
+    document.getElementById('chk-texto-perg').textContent = CHK.textoPergunta;
+    const tipoLabel = CHK.tipoResposta === 'Multipla' ? 'SELECIONE TODAS QUE APLICAM' :
+      CHK.tipoResposta === 'Matriz_Risco' ? 'AVALIE O RISCO' : 'SELECIONE UMA OPCAO';
+    document.getElementById('chk-tipo-resp').textContent = tipoLabel;
+    document.getElementById('chk-foto-aviso').style.display = CHK.fotoObrigatoria ? 'block' : 'none';
+    document.getElementById('chk-btn-confirmar').style.display = CHK.tipoResposta === 'Multipla' ? 'block' : 'none';
+    renderizarOpcoes(perg.opcoes || []);
+    document.getElementById('chk-pergunta-block').style.display = 'block';
+  }).catch(() => { document.getElementById('chk-loading').style.display = 'none'; toast('Erro ao carregar pergunta', true); });
+  // PULADO de propósito na auditoria de mensagens (12/08): getProximaPergunta
+  // é função só-leitura (não passa pelo envelope canônico -- ver
+  // docs/CONTRATO-FRONTEND-ENVELOPE-RECUSA.md, lista de funções só-leitura),
+  // então não tem blocking_reasons/retryable pra ler; a falha aqui é
+  // sempre de transporte (rede/timeout), sem motivo de negócio pra mostrar.
+}
+
+function renderizarOpcoes(opcoes) {
+  const el = document.getElementById('chk-opcoes');
+  el.innerHTML = '';
+  if (CHK.tipoResposta === 'Matriz_Risco') {
+    ['Baixo', 'Medio', 'Alto'].forEach(nivel => {
+      const b = document.createElement('button');
+      const cores = { Baixo: 'var(--green)', Medio: 'var(--yellow)', Alto: 'var(--red)' };
+      b.className = 'btn';
+      b.style.cssText = 'background:' + cores[nivel] + ';color:#fff;margin-bottom:10px';
+      b.textContent = nivel;
+      b.onclick = () => responderPergunta(nivel, false);
+      el.appendChild(b);
+    });
+    return;
+  }
+  opcoes.forEach(op => {
+    const geraNC = op['Aciona_NC'] === true || op['Aciona_NC'] === 'TRUE';
+    if (CHK.tipoResposta === 'Multipla') {
+      const label = document.createElement('label');
+      label.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;cursor:pointer';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.value = op['Texto_Opcao']; cb.dataset.nc = geraNC ? '1' : '0';
+      cb.style.cssText = 'width:20px;height:20px;accent-color:var(--green)';
+      cb.onchange = () => {
+        if (cb.checked) CHK.selecionados.push({ texto: cb.value, nc: geraNC });
+        else CHK.selecionados = CHK.selecionados.filter(s => s.texto !== cb.value);
+      };
+      const span = document.createElement('span');
+      span.style.cssText = 'font-size:16px;color:var(--text)'; span.textContent = op['Texto_Opcao'];
+      label.appendChild(cb); label.appendChild(span); el.appendChild(label);
+    } else {
+      const b = document.createElement('button');
+      b.className = 'btn btn-gray'; b.style.marginBottom = '10px'; b.textContent = op['Texto_Opcao'];
+      b.onclick = () => responderPergunta(op['Texto_Opcao'], geraNC);
+      el.appendChild(b);
+    }
+  });
+}
+
+function responderPergunta(resposta, geraNC) {
+  // NC (nao conformidade) exige justificativa + foto antes de gravar --
+  // bloqueio real, nao so aviso visual. Mesmo padrao do KM
+  // (validarESalvarKMInicial): foto ainda nao existe no app, entao NC
+  // fica bloqueada ate a captura de foto ser implementada -- limitacao
+  // conhecida e ja aceita no fluxo de KM, replicada aqui de proposito.
+  if (geraNC) { abrirConfirmacaoNC(resposta); return; }
+  _gravarResposta(resposta, geraNC);
+}
+function _gravarResposta(resposta, geraNC) {
+  CHK.totalRespostas++;
+  if (geraNC) CHK.temNC = true;
+  // Migrado de gsCall pra gsCallIdempotente (achado real, 13/08) --
+  // mesmo motivo dos outros 3 pontos de salvarResposta neste arquivo.
+  // P0 (15/08): coleta a promise -- _fecharFase2Execucao precisa saber
+  // que TODAS as respostas desta fase já resolveram antes de chamar
+  // fecharFaseChecklist (ver comentário completo em _finalizarFase1).
+  CHK.chamadasPendentes.push(
+    gsCallIdempotente('salvarResposta', (opId, devId) => [CHK.osId, CHK.idSharePointOS, CHK.perguntaAtualId, CHK.textoPergunta, resposta, '', APP.tecnico.nome, geraNC, opId, devId, APP.tecnico.id], { enfileiravelSeOffline: true, tipoOperacao: 'CHECKLIST', osId: CHK.osId })
+  );
+  document.getElementById('chk-loading').style.display = 'block';
+  document.getElementById('chk-pergunta-block').style.display = 'none';
+  document.getElementById('chk-nc-block').style.display = 'none';
+  carregarPergunta(CHK.perguntaAtualId, resposta);
+}
+function confirmarMultipla() {
+  if (CHK.selecionados.length === 0) { toast('Selecione ao menos uma opcao', true); return; }
+  const resposta = CHK.selecionados.map(s => s.texto).join('; ');
+  const geraNC = CHK.selecionados.some(s => s.nc);
+  responderPergunta(resposta, geraNC);
+}
+
+// ─── NC: bloqueio real de foto+texto (mesmo padrao do KM) ───────────
+function abrirConfirmacaoNC(resposta) {
+  CHK.respostaNCPendente = resposta;
+  document.getElementById('chk-nc-resposta').textContent = resposta;
+  document.getElementById('chk-nc-justificativa').value = '';
+  document.getElementById('chk-pergunta-block').style.display = 'none';
+  document.getElementById('chk-nc-block').style.display = 'block';
+}
+function cancelarRespostaNC() {
+  CHK.respostaNCPendente = null;
+  document.getElementById('chk-nc-block').style.display = 'none';
+  document.getElementById('chk-pergunta-block').style.display = 'block';
+}
+function confirmarRespostaNC() {
+  const justificativa = document.getElementById('chk-nc-justificativa').value.trim();
+  const temFoto = false; // captura de foto nao existe no app ainda (mesma limitacao do KM)
+  if (!justificativa || !temFoto) {
+    toast('Justificativa e foto sao obrigatorias para nao conformidade — captura de foto ainda nao disponivel nesta versao do app', true);
+    return;
+  }
+  // Inalcancavel enquanto temFoto for sempre false, de proposito — ver comentario acima.
+  _gravarResposta(CHK.respostaNCPendente, true);
+}
+function concluirChecklist() {
+  const os = APP.osAtiva || APP.osPausada;
+  if (os) {
+    const estado = CHK3F.lerEstado(os.id);
+    estado.fase2 = { completo: true, temNC: !!CHK.temNC };
+    CHK3F.salvarEstado(os.id, estado);
+  }
+  showScreen('scr-os-ativa');
+  toast('Checklist concluido! ' + CHK.totalRespostas + ' perguntas respondidas');
+}
+
+// ================================================================
+// MEU VEICULO
+// ================================================================
+function irParaMeuVeiculo(origem) {
+  APP.veiculoOrigem = origem || 'scr-home';
+  document.getElementById('veiculo-status-badge').innerHTML = '<span class="status-badge badge-neutro">Carregando...</span>';
+  document.getElementById('veiculo-status-msg').style.display = 'none';
+  document.getElementById('veiculo-aviso-aprovado').style.display = 'none';
+  document.getElementById('veiculo-sub').textContent = 'Autocadastro';
+  showScreen('scr-meu-veiculo');
+  _carregarFormVeiculo();
+}
+function voltarMeuVeiculo() {
+  const origem = APP.veiculoOrigem || 'scr-home';
+  showScreen(origem);
+  if (origem === 'scr-inicio-dia' && APP.veiculo && (APP.veiculo.statusAprovacao === 'Pendente' || APP.veiculo.alteracaoPendente)) {
+    document.getElementById('card-veiculo-pergunta').style.display = 'none';
+    document.getElementById('card-sem-veiculo').style.display = 'none';
+    _mostrarFluxoKM(APP.veiculo);
+  }
+}
+function _carregarFormVeiculo() {
+  if (APP.veiculo !== undefined) { _renderizarFormVeiculo(APP.veiculo); return; }
+  showLoading('Carregando veiculo...');
+  gsCall('getVeiculoDoTecnico', [APP.tecnico.id]).then(v => {
+    hideLoading(); APP.veiculo = v; _renderizarFormVeiculo(v);
+  }).catch(() => { hideLoading(); toast('Erro ao carregar dados do veiculo', true); });
+}
+function _renderizarFormVeiculo(v) {
+  const badgeEl = document.getElementById('veiculo-status-badge');
+  const msgEl = document.getElementById('veiculo-status-msg');
+  const avisoEl = document.getElementById('veiculo-aviso-aprovado');
+  const avisoTxt = document.getElementById('veiculo-aviso-texto');
+  if (!v) {
+    badgeEl.innerHTML = '<span class="status-badge badge-neutro">Nenhum veiculo cadastrado</span>';
+    msgEl.style.display = 'none'; avisoEl.style.display = 'none';
+    document.getElementById('veiculo-placa').value = '';
+    document.getElementById('veiculo-modelo').value = '';
+    document.getElementById('veiculo-tipo').value = 'Carro proprio';
+    return;
+  }
+  document.getElementById('veiculo-tipo').value = v.tipoVeiculo || 'Carro proprio';
+  document.getElementById('veiculo-placa').value = v.placa || '';
+  document.getElementById('veiculo-modelo').value = v.modelo || '';
+  if (v.statusAprovacao === 'Aprovado' && !v.alteracaoPendente) {
+    badgeEl.innerHTML = '<span class="status-badge badge-aprovado">Aprovado</span>';
+    avisoEl.style.display = 'flex';
+    avisoTxt.textContent = 'Seu veiculo ' + (v.placa || '') + ' esta aprovado. Qualquer alteracao precisara de nova aprovacao do gestor.';
+    msgEl.style.display = 'none';
+  } else if (v.statusAprovacao === 'Rejeitado') {
+    badgeEl.innerHTML = '<span class="status-badge badge-rejeitado">Rejeitado</span>';
+    msgEl.style.display = 'block';
+    msgEl.textContent = v.motivoRejeicao ? 'Motivo: ' + v.motivoRejeicao : 'Cadastro rejeitado pelo gestor. Corrija os dados e reenvie.';
+    avisoEl.style.display = 'none';
+  } else {
+    badgeEl.innerHTML = '<span class="status-badge badge-pendente">Aguardando aprovacao do gestor</span>';
+    msgEl.style.display = 'block';
+    msgEl.textContent = 'Seu veiculo esta em analise. Voce pode atualizar os dados e reenviar enquanto aguarda.';
+    avisoEl.style.display = 'none';
+  }
+}
+function salvarVeiculo() {
+  const tipo = document.getElementById('veiculo-tipo').value;
+  const placa = document.getElementById('veiculo-placa').value.trim().toUpperCase();
+  const modelo = document.getElementById('veiculo-modelo').value.trim();
+  if (!placa) { toast('Informe a placa do veiculo', true); return; }
+  if (!modelo) { toast('Informe o modelo do veiculo', true); return; }
+  showLoading('Salvando veiculo...');
+  gsCall('cadastrarOuEditarVeiculo', [APP.tecnico.id, APP.tecnico.nome, tipo, placa, modelo], { enfileiravelSeOffline: true })
+    .then(res => {
+      hideLoading();
+      if (res.erro) { toast('Erro: ' + res.erro, true); return; }
+      APP.veiculo = { tipoVeiculo: tipo, placa, modelo, statusAprovacao: 'Pendente', alteracaoPendente: false, motivoRejeicao: '' };
+      toast(res.status || 'Enviado para aprovacao!');
+      _renderizarFormVeiculo(APP.veiculo);
+    }).catch(() => { hideLoading(); toast('Erro ao salvar veiculo', true); });
+}
+
+// ================================================================
+// ENCERRAR
+// ================================================================
+function irParaEncerrar() {
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  // Fase 3 (Pós-Execução) do checklist da OS -- este gate local (via
+  // localStorage) é só um atalho rápido/offline-friendly pra não
+  // navegar pro wizard à toa; a barreira REAL agora é server-side
+  // (canCloseOS, 5º motivo -- ver bloco CHK3F pra o achado P0 fechado
+  // em 15/08). Mesmo que este gate local esteja desatualizado (troca
+  // de aparelho, etc.), a etapa "Pendências"/"Revisão" do wizard
+  // re-consulta canCloseOS de verdade antes de liberar o fechamento.
+  const estado = CHK3F.lerEstado(os.id);
+  if (!estado.fase1 || !estado.fase1.completo) {
+    toast('Complete a Fase 1 (Pré-Execução) do checklist antes de encerrar a OS', true);
+    irParaChecklist();
+    return;
+  }
+  if (!estado.fase2 || !estado.fase2.completo) {
+    toast('Complete a Fase 2 (Execução) do checklist antes de encerrar a OS', true);
+    irParaChecklist();
+    return;
+  }
+  const segStatusEl = document.getElementById('enc-seguranca-status');
+  segStatusEl.textContent = 'Segurança: ' + (estado.fase1.estadoSeguranca || 'Confirmada');
+  segStatusEl.style.color = estado.fase1.estadoSeguranca === 'Liberado' ? 'var(--green)'
+    : estado.fase1.estadoSeguranca === 'Bloqueado' ? 'var(--red)' : 'var(--gray)';
+  document.getElementById('enc-id').textContent = os.id + ' - ' + os.cliente;
+  document.getElementById('enc-qtd').value = os.qtdRealizada || '';
+  document.getElementById('enc-pct').value = os.pctAcumulado || 0;
+  document.getElementById('enc-pct-num').textContent = os.pctAcumulado || 0;
+  document.getElementById('enc-obs').value = '';
+  document.getElementById('enc-materiais').value = '';
+  document.getElementById('enc-proximo').value = '';
+  document.getElementById('enc-nc').checked = false;
+  document.getElementById('enc-aceite-confirmado').checked = false;
+  const nc = document.getElementById('enc-nc');
+  const track = document.getElementById('enc-nc-track');
+  const thumb = document.getElementById('enc-nc-thumb');
+  nc.addEventListener('change', () => {
+    track.style.background = nc.checked ? 'var(--green)' : 'var(--bg3)';
+    thumb.style.background = nc.checked ? '#fff' : 'var(--gray)';
+    thumb.style.transform = nc.checked ? 'translateX(24px)' : '';
+  });
+  showScreen('scr-encerrar');
+  encerramentoIrParaEtapa(1);
+}
+
+// ================================================================
+// WIZARD DE ENCERRAMENTO -- reorganização de UX (13/08, seções 49-55
+// do documento do auditor), Fase C. Execução -> Pendências ->
+// Evidências -> Aceite -> Revisão -> Concluir, em vez de formulário
+// único. APP.encEtapaAtual guarda a etapa (1-6); nenhuma etapa pula
+// validação -- é sequencial, "Continuar" avança 1 por vez.
+// ================================================================
+const ENC_ETAPA_TITULOS = ['', 'Execução', 'Pendências', 'Evidências', 'Aceite', 'Revisão', 'Concluído'];
+function encerramentoIrParaEtapa(n) {
+  APP.encEtapaAtual = n;
+  for (let i = 1; i <= 6; i++) {
+    document.getElementById('enc-etapa-' + i).style.display = (i === n) ? 'block' : 'none';
+  }
+  document.getElementById('enc-etapa-label').textContent = n < 6 ? ('Etapa ' + n + ' de 6 — ' + ENC_ETAPA_TITULOS[n]) : '';
+  if (n === 2) renderizarPendencias();
+  if (n === 5) renderizarRevisao();
+}
+function encerramentoProximaEtapa() {
+  const n = APP.encEtapaAtual || 1;
+  // Etapa 4 (Aceite) exige o gesto explícito antes de avançar -- é o
+  // ponto inteiro desta etapa existir separada de Evidências.
+  if (n === 4 && !document.getElementById('enc-aceite-confirmado').checked) {
+    toast('Confirme que o cliente aceitou o serviço antes de continuar', true);
+    return;
+  }
+  encerramentoIrParaEtapa(n + 1);
+}
+function encerramentoVoltarEtapa() {
+  const n = APP.encEtapaAtual || 1;
+  if (n > 1 && n <= 5) { encerramentoIrParaEtapa(n - 1); return; }
+  if (n === 6) { encerramentoIrParaEtapa(5); return; } // voltar do resultado cai na revisão, não sai da tela
+  voltar(APP.osAtiva ? 'scr-os-ativa' : 'scr-pausada');
+}
+
+// Pré-validação (item 4 da reorganização): mostra o que falta ANTES da
+// última tela, não só no clique final. canCloseOS (Frente C) já existe
+// read-only, sem efeito colateral -- chamado aqui de forma PROATIVA
+// (sem dadosPendentes, reflete o que já está salvo agora) em vez de só
+// no submit. Servidor decide, frontend só reflete -- não reimplementa
+// as 4 regras aqui.
+function renderizarPendencias() {
+  const os = APP.osAtiva || APP.osPausada;
+  const el = document.getElementById('enc-pendencias-lista');
+  el.textContent = 'Verificando...';
+  gsCall('canCloseOS', [os.id]).then(r => {
+    if (r.allowed) {
+      el.innerHTML = '<div style="color:var(--green)">Tudo certo pra concluir esta OS.</div>';
+      return;
+    }
+    el.innerHTML = (r.blockingReasons || []).map(m => '<div style="color:var(--yellow);margin-bottom:6px">⚠ ' + m + '</div>').join('');
+  }).catch(() => { el.textContent = 'Não foi possível verificar agora (sem sinal?) — confira antes de concluir.'; });
+}
+
+function renderizarRevisao() {
+  const os = APP.osAtiva || APP.osPausada;
+  const qtd = document.getElementById('enc-qtd').value || '0';
+  const pct = document.getElementById('enc-pct').value || '0';
+  const obs = document.getElementById('enc-obs').value.trim();
+  const materiais = document.getElementById('enc-materiais').value.trim();
+  const proximo = document.getElementById('enc-proximo').value.trim();
+  const nc = document.getElementById('enc-nc').checked;
+  document.getElementById('enc-revisao-resumo').innerHTML =
+    '<div><b>Quantidade:</b> ' + qtd + '</div>' +
+    '<div><b>Acumulado:</b> ' + pct + '%</div>' +
+    (obs ? '<div style="margin-top:6px"><b>Observações:</b> ' + obs + '</div>' : '') +
+    (materiais ? '<div><b>Materiais:</b> ' + materiais + '</div>' : '') +
+    (proximo ? '<div><b>Próximo passo:</b> ' + proximo + '</div>' : '') +
+    '<div style="margin-top:6px"><b>Não conformidade:</b> ' + (nc ? 'Sim' : 'Não') + '</div>' +
+    '<div><b>Laudo:</b> ' + document.getElementById('enc-laudo-status').textContent + '</div>' +
+    '<div><b>Assinatura:</b> ' + document.getElementById('enc-assinatura-status').textContent + '</div>' +
+    '<div><b>Segurança:</b> ' + document.getElementById('enc-seguranca-status').textContent + '</div>';
+
+  // Última checagem antes de habilitar o botão final -- evita a
+  // corrida entre entrar em Pendências e chegar aqui (ex.: upload que
+  // terminou de processar nesse meio tempo).
+  const bloqueioEl = document.getElementById('enc-revisao-bloqueio');
+  const btnConcluir = document.getElementById('enc-btn-concluir');
+  bloqueioEl.style.display = 'none';
+  btnConcluir.disabled = false; btnConcluir.style.opacity = '1';
+  gsCall('canCloseOS', [os.id]).then(r => {
+    if (!r.allowed) {
+      bloqueioEl.style.display = 'block';
+      bloqueioEl.textContent = 'Ainda falta: ' + (r.blockingReasons || []).join('; ');
+      btnConcluir.disabled = true; btnConcluir.style.opacity = '.5';
+    }
+  }).catch(() => {}); // sem sinal -- deixa tentar; confirmarEncerramento já trata a recusa se acontecer
+}
+
+function calcularPct() {
+  const qtd = parseInt(document.getElementById('enc-qtd').value) || 0;
+  const os = APP.osAtiva || APP.osPausada;
+  if (os && os.metaDia > 0) {
+    const pct = Math.min(100, Math.round((qtd / os.metaDia) * 100));
+    document.getElementById('enc-pct').value = pct;
+    document.getElementById('enc-pct-num').textContent = pct;
+  }
+}
+
+// Mostra o resultado na Etapa 6 (Concluir) -- recusa NÃO sai do wizard
+// mais (era um toast antes); "AJUSTAR" volta pra Pendências em vez do
+// técnico só ver um erro genérico e não saber o que fazer.
+function mostrarResultadoEncerramento(sucesso, titulo, msg) {
+  document.getElementById('enc-resultado-titulo').textContent = titulo;
+  document.getElementById('enc-resultado-titulo').style.color = sucesso ? 'var(--green)' : 'var(--red)';
+  document.getElementById('enc-resultado-msg').textContent = msg;
+  document.getElementById('enc-btn-voltar-home').style.display = sucesso ? 'block' : 'none';
+  document.getElementById('enc-btn-ajustar').style.display = sucesso ? 'none' : 'block';
+  encerramentoIrParaEtapa(6);
+}
+
+function confirmarEncerramento() {
+  if (acaoCriticaEmAndamento('encerrarOS')) return;
+  const os = APP.osAtiva || APP.osPausada;
+  if (!os) return;
+  travarAcaoCritica('encerrarOS');
+  const dadosEnc = {
+    qtdRealizada: parseInt(document.getElementById('enc-qtd').value) || 0,
+    pctAcumulado: parseInt(document.getElementById('enc-pct').value) || 0,
+    observacoes: document.getElementById('enc-obs').value.trim(),
+    materiais: document.getElementById('enc-materiais').value.trim(),
+    ocorrencias: '', proximoPasso: document.getElementById('enc-proximo').value.trim(),
+    fotosURL: '', naoConformidade: document.getElementById('enc-nc').checked
+  };
+  showLoading('Encerrando OS...');
+  pararCronometro(); limparTimerLS();
+  // Frente D: encerrarOSComKM (não mais encerrarOS puro) porque é a
+  // versão que aceita operationId/dispositivoId no final e passa pelo
+  // executarIdempotente() no backend — retry (rede ruim, fila offline)
+  // não conclui a OS duas vezes nem recalcula horas em cima de si mesmo.
+  gsCallIdempotente(
+    'encerrarOSComKM',
+    (operationId, dispositivoId) => [os.id, APP.tecnico.id, APP.tecnico.nome, dadosEnc, null, null, operationId, dispositivoId],
+    { enfileiravelSeOffline: true, tipoOperacao: 'CONCLUSAO', osId: os.id }
+  ).then(res => {
+      destravarAcaoCritica('encerrarOS');
+      hideLoading();
+      if (res.erro) { mostrarResultadoEncerramento(false, 'Não foi possível concluir', res.erro); return; }
+      if (res.sucesso === false) {
+        // Backend recusou por regra de negócio (Frente C: canCloseOS) —
+        // motivos reais, não um erro genérico de rede.
+        const motivos = Array.isArray(res.blockingReasons) ? res.blockingReasons.join('; ') : (res.erro || 'motivo não informado');
+        mostrarResultadoEncerramento(false, 'OS não pode ser concluída ainda', motivos);
+        return;
+      }
+      APP.osAtiva = null; APP.osPausada = null;
+      mostrarResultadoEncerramento(true, res.offline ? 'OS encerrada (offline)' : 'OS encerrada!',
+        res.offline ? 'Sincroniza quando a conexão voltar. Seus dados permanecem salvos neste aparelho.' : res.horasFinais + ' produtivos');
+    }).catch(err => { destravarAcaoCritica('encerrarOS'); hideLoading(); mostrarResultadoEncerramento(false, 'Erro', 'Erro ao encerrar: ' + err.message); });
+}
+
+// ================================================================
+// RESUMO
+// ================================================================
+function irParaResumo() {
+  showScreen('scr-resumo');
+  document.getElementById('resumo-sub').textContent = new Date().toLocaleDateString('pt-BR', {weekday:'long',day:'2-digit',month:'long'});
+  showLoading('Carregando resumo...');
+  gsCall('getDiariaTecnico', [APP.tecnico.id]).then(renderResumo).catch(() => { hideLoading(); toast('Erro ao carregar resumo', true); });
+}
+function renderResumo(diaria) {
+  hideLoading();
+  if (!diaria) {
+    document.getElementById('resumo-vazio').style.display = 'block';
+    document.getElementById('resumo-dados').style.display = 'none';
+    document.getElementById('resumo-km-block').style.display = 'none';
+    return;
+  }
+  document.getElementById('resumo-vazio').style.display = 'none';
+  document.getElementById('resumo-dados').style.display = 'block';
+  document.getElementById('res-horas').textContent = diaria.horasProdFormatadas || '0h00';
+  document.getElementById('res-os').textContent = diaria.qtdOS || 0;
+  document.getElementById('res-pauses').textContent = diaria.qtdInterrupcoes || 0;
+  document.getElementById('res-entrada').textContent = diaria.horaEntrada || '--:--';
+  document.getElementById('res-saida').textContent = diaria.horaSaida || '--:--';
+  document.getElementById('res-clientes').textContent = diaria.clientes || 'Nenhum cliente registrado';
+  document.getElementById('res-status').textContent = diaria.statusDia || 'Em campo';
+  const kmBlock = document.getElementById('resumo-km-block');
+  const usaVeiculo = diaria.usaVeiculo === true || diaria.usaVeiculo === 'TRUE';
+  const kmFinalVazio = !diaria.kmFinal || diaria.kmFinal === '' || diaria.kmFinal === 0;
+  kmBlock.style.display = (usaVeiculo && kmFinalVazio) ? 'block' : 'none';
+}
+
+// ================================================================
+// STATUS OFFLINE/ONLINE
+// ================================================================
+window.addEventListener('online', () => {
+  document.getElementById('offline-banner').classList.remove('show');
+  processarFilaOffline();
+});
+window.addEventListener('offline', () => {
+  document.getElementById('offline-banner').classList.add('show');
+});
+
+// ================================================================
+// SERVICE WORKER
+// ================================================================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW falhou:', err));
+  });
+}
+
+// ================================================================
+// BUILD ID (Seção 30) + GATE DE COMPATIBILIDADE DE CONTRATO (Seção 19)
+// ================================================================
+function atualizarBuildIdBadge() {
+  const el = document.getElementById('build-id');
+  if (el) el.textContent = 'v' + APP_BUILD_VERSAO + ' · ' + APP_BUILD_COMMIT + ' · api:' + FIELD_API_CONTRACT_ESPERADO;
+}
+
+// Roda ANTES de qualquer outra coisa no boot (inclusive antes do
+// outbox offline e da tela de login) -- "bloquear com mensagem clara,
+// nunca seguir silenciosamente" quando o contrato não bate. Fail-open
+// deliberado no resto dos casos: sem sinal, timeout, ou backend ainda
+// sem a action (resposta sem o campo field_api_contract -- mesmo
+// formato de "Acao desconhecida" que o dispatcher já devolve hoje pra
+// qualquer action não implementada) NÃO bloqueia, senão este mesmo
+// commit quebraria o app pra todo mundo antes do backend publicar o
+// contrato. Ver CONTRATO-BACKEND-FIELD-API-CONTRACT.md.
+async function verificarContratoAPI() {
+  try {
+    const r = await gsCallReal('getFieldApiContract', []);
+    if (r && r.field_api_contract && r.field_api_contract !== FIELD_API_CONTRACT_ESPERADO) {
+      mostrarBloqueioContrato(r.field_api_contract);
+      return false;
+    }
+  } catch (e) {
+    // sem sinal, timeout, ou backend não respondeu -- não bloqueia
+  }
+  return true;
+}
+
+function mostrarBloqueioContrato(recebido) {
+  document.getElementById('bloqueio-contrato-detalhe').textContent =
+    'Esperado: ' + FIELD_API_CONTRACT_ESPERADO + ' · Recebido: ' + (recebido || '(vazio)');
+  document.getElementById('scr-bloqueio-contrato').classList.add('show');
+}
+
+// ================================================================
+// INICIALIZACAO
+// ================================================================
+window.addEventListener('DOMContentLoaded', async () => {
+  atualizarBuildIdBadge();
+  const compativel = await verificarContratoAPI();
+  if (!compativel) return; // bloqueado -- não segue pro outbox, oferta nem login
+  if (!navigator.onLine) document.getElementById('offline-banner').classList.add('show');
+  // D7-08: reconcilia ANTES de processarFilaOffline() -- resolve o que
+  // sobrou de uma sessão anterior que morreu no meio (LOCAL_PENDING/
+  // LOCAL_PENDING_UPLOAD) antes de deixar a fila normal tentar
+  // qualquer coisa nova. Roda mesmo offline (consultarStatusOperacao
+  // simplesmente falha e cai no caminho seguro -- ver as duas funções).
+  await reconciliarIntencoesOrfas();
+  await reconciliarUploadsOrfaos();
+  processarFilaOffline();
+  // Frente B, fatia 5 -- link profundo de oferta tem prioridade sobre o
+  // login normal: o técnico pode abrir o app pela 1a vez direto de um
+  // link do WhatsApp, sem nunca ter "logado" antes neste aparelho.
+  const linkOferta = parseLinkOferta();
+  if (linkOferta) { abrirTelaOferta(linkOferta); return; }
+  // Por segurança, o app SEMPRE mostra a tela de login ao abrir
+  // (mesmo que já tenha sido usado antes neste aparelho) — evita
+  // que um técnico abra sem querer no espaço de outro.
+  carregarTecnicos();
+});
+</script>
+</body>
+</html>
