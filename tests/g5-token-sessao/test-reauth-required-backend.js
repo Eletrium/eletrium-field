@@ -28,11 +28,12 @@ let pass=0,fail=0;
 function ok(name,cond,detail){if(cond){pass++;console.log('OK   '+name)}else{fail++;console.log('FAIL '+name+(detail?' -- '+detail:''))}}
 function canonical(r){return r&&r.success===false&&r.sucesso===false&&r.retryable===false&&typeof r.reauth_required==='boolean'&&Array.isArray(r.blocking_reasons)}
 
-// 1. Sweep estrutural: todo guard de sessao usa _recusaSessao, nunca _recusa direta.
+// 1. E3-26 — sweep estrutural: todo guard de sessao usa _recusaSessao,
+// nunca _recusa direta. Um unico guard antigo restante deve falhar o gate.
 const runtime=CODIGO+'\n'+ONDA2;
 const oldGuards=(runtime.match(/if\s*\(!identidade\.ok\)\s*return\s+_recusa\([^;]*identidade\.erro\);/g)||[]).length;
 const sessionRefusals=(runtime.match(/if\s*\(!identidade\.ok\)\s*return\s+_recusaSessao\(/g)||[]).length;
-ok('1a nenhum guard de sessao usa _recusa direta',oldGuards===0,'old='+oldGuards);
+ok('1a E3-26 nenhum guard de sessao usa _recusa direta',oldGuards===0,'old='+oldGuards);
 ok('1b 19 guards de sessao usam _recusaSessao',sessionRefusals===19,'count='+sessionRefusals);
 ok('1c _recusaSessao existe uma vez em Código.js',(CODIGO.match(/function\s+_recusaSessao\s*\(/g)||[]).length===1);
 
@@ -82,5 +83,23 @@ ok('4c dispatcher encaminha token para KM pendente',/getOSsPendentesKMFinal\(p\[
 ok('5a FIELD_API_CONTRACT continua v1',/const\s+FIELD_API_CONTRACT\s*=\s*['"]v1['"]/.test(CODIGO));
 ok('5b getOSsPendentes token trailing opcional',/function\s+getOSsPendentesKMFinal\(tecnicoId,\s*token\)/.test(CODIGO));
 ok('5c criarOSEmergencia token aditivo no objeto',/const\s+token\s*=\s*dados\s*&&\s*dados\.token/.test(CODIGO));
+
+// 6. E3-34/E3-35 — sessao valida NAO substitui autorizacao de posse.
+// PR #1 ja cobria explicitamente pausarOS; aqui repetimos no contrato REAUTH
+// e adicionamos o simetrico de retomarOS, que nao tinha caso dedicado.
+const calls=[];
+s.verificarPosseOS=(osId,tecnicoId)=>({ok:false,erro:'Tecnico '+tecnicoId+' nao tem posse da OS '+osId});
+s.pausarOS=(...args)=>{calls.push({fn:'pausarOS',args});return{sucesso:true}};
+s.retomarOS=(...args)=>{calls.push({fn:'retomarOS',args});return{sucesso:true}};
+
+calls.length=0;
+const rPause=s.pausarOSComSessao('OS-NEGADA','TEC-1','Nome','Almoco','','OP-E3-34','DEV-1',valid);
+ok('6a E3-34 pausar: token valido + posse negada bloqueia',rPause&&rPause.success===false&&/nao tem posse/i.test(rPause.erro),JSON.stringify(rPause));
+ok('6b E3-34 pausar: zero delegacao',calls.length===0,JSON.stringify(calls));
+
+calls.length=0;
+const rResume=s.retomarOSComSessao('OS-NEGADA','TEC-1','Nome','OP-E3-35','DEV-1',valid);
+ok('6c E3-35 retomar: token valido + posse negada bloqueia',rResume&&rResume.success===false&&/nao tem posse/i.test(rResume.erro),JSON.stringify(rResume));
+ok('6d E3-35 retomar: zero delegacao',calls.length===0,JSON.stringify(calls));
 
 console.log(`\nREAUTH backend: ${pass} PASS / ${fail} FAIL`);if(fail)process.exitCode=1;
