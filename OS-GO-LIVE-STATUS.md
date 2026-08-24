@@ -8,8 +8,8 @@
 | G2 — 1B newest-wins | Claude | 🟡 EM TESTE | Make 1B | confirmar estado atual pela frente Claude antes de alterar este gate | evidência real mais recente de G2 |
 | G3 — E2E-SYNC-CONFLICT | Claude | ⏸️ DEPENDE DE G2 | 1A + 1B | G2 | `ROTEIRO-E2E-SYNC-CONFLICT.md` + execução real |
 | G4 — Retry automático | Claude + ação operacional | 🟡 NÃO FECHADO | scanner Make | confirmar evidência real mais recente pela frente Claude | execução real + teto/retry |
-| G5 — Sessão HMAC / E-TOCTOU-01 | ChatGPT | 🟡 EM EXECUÇÃO | backend integrado + Field divergente | materializar Field autoritativo; migrar token no frontend; sinal separado de reautenticação; reconciliar `registrarUsoVeiculo`; E2E; enforcement | PR #4 red-team independente sem bloqueante; PR #5 integrado e CI verde |
-| G6 — Homologação candidata | ChatGPT; Claude co-review | ⛔ NÃO CRIADO | preparação documental apenas | G5 frontend + Field SHA autoritativo + versões Make/SP/Admin + demais pré-condições | `G6-CANDIDATE-MANIFEST.md`; nenhum candidate deployment existe |
+| G5 — Sessão HMAC / E-TOCTOU-01 | ChatGPT; Claude assumiu backend/PR#6/autorização G6 | 🟢 BACKEND FECHADO | PR#6 mergeado (`52c9cca`) | Field: status de migração de token/sinal reauth/E2E não reconfirmado nesta rodada — owner autorizou G6 apesar disso | PR#6 aprovado pela Cowork 2 sem bloqueante; 103/103 REAUTH; 33/33 suíte portátil |
+| G6 — Homologação candidata | Claude (autorização assumida do ChatGPT) | 🟡 DECLARADA FORMALMENTE, SEM DEPLOYMENT TÉCNICO | `OS_FIELD_CANDIDATE_V2_1` | criação técnica (`clasp deploy`) exige autorização separada; ERP Admin build e segredos HMAC do ambiente candidato ainda pendentes | `G6-CANDIDATE-MANIFEST.md` atualizado 24/08 — versões congeladas + rollback documentado; nenhum candidate deployment técnico existe |
 | G7 — Deploy | coordenado | ⏹️ NÃO INICIADO | — | G2-G6 | plano + rollback |
 | G8 — Produção assistida | coordenado | ⏹️ NÃO INICIADO | — | G7 | OS real controlada ponta a ponta |
 
@@ -88,12 +88,37 @@ A presença de `index.html` dentro da branch de backend não o promove a fronten
 - squash merge na linha ativa: `20c53f41e84a3af01b11964b45372999f0f22885`
 - prova permanente: envelope canônico único Onda 2/3; `retryable:false` para expiração; verifier fail-closed sem exceção para entradas adversariais.
 
+## PR#6 — contrato REAUTH_REQUIRED completo — ✅ MERGEADO
+
+- branch: `chatgpt/g5-reauth-backend-20260821`
+- HEAD final: `39481cbce0c55131ff36674b7d09d5fd67e71fe2`
+- achado real durante a retomada: patch (`tools/apply-g5-reauth.js`) provado só dentro do CI
+  (arquivos exportados como artifact, nunca commitados) — corrigido, aplicado de verdade no
+  source (causa raiz: CRLF quebrando o match de string do script num checkout Windows).
+- red-team independente (agente sem contexto prévio): sem bloqueante.
+- revisão de coerência da Cowork 2: **APROVADO sem bloqueante** — 2 achados reais corrigidos
+  (lacuna de teste do item 9 do contrato; `cadastrarOuEditarVeiculo` sem cobertura), workflow de
+  CI órfão removido antes do merge.
+- suíte final: 103/103 no arquivo REAUTH dedicado; 33/33 arquivos na suíte portátil.
+- squash merge na linha ativa: `52c9cca1d1e9c7736120ec92b2e859caf2b27307`.
+
 ## Baseline atual do backend G5
 
 - branch: `active-os-backend-v2.1-20260815`
-- SHA atual após PR #5: `20c53f41e84a3af01b11964b45372999f0f22885`
+- SHA atual após PR#6: `52c9cca1d1e9c7736120ec92b2e859caf2b27307`
 - nenhuma publicação Apps Script decorrente desses merges; `@40` continua congelada.
 
-## Próxima sequência G5 → G6
+## G6 — declarada formalmente, sem deployment técnico
 
-`materializar eletrium-field-checklist3 em branch remota → inspecionar/fixar Field SHA → migrar sessão/token + sinal de reautenticação no Field real → reconciliar registrarUsoVeiculo → E2E autenticado → congelar SHAs/versões de todos os componentes → owner autoriza criação do G6 → homologação integrada`.
+Owner autorizou G6 em 24/08/2026: **"G6 AUTORIZADO... Isso NÃO autoriza deploy — só a
+existência formal da candidata pra homologação apontar pra ela."**
+
+`G6-CANDIDATE-MANIFEST.md` atualizado com: Backend `52c9cca`, Field `1636814`
+(`active-field-v2.1-20260821`, confirmado como a linhagem correta), Make 1A `5519682`, Make 1B
+`5512830`, schema SharePoint (snapshot Code 3, commit `1542c64`), plano de rollback completo por
+componente (Apps Script/Field/Make 1A/Make 1B/schema/ERP Admin). ERP Admin build e a confirmação
+dos 2 segredos HMAC no ambiente candidato ficam pendentes — não bloqueiam a declaração formal
+(decisão do owner), mas precisam fechar antes de qualquer `clasp deploy` real.
+
+**Nenhuma ação técnica de deploy foi executada.** `@40` intocada. Criação técnica do deployment
+candidato continua exigindo autorização explícita separada.
