@@ -79,6 +79,17 @@ ok('4a getOSsPendentesKMFinal protegido',rKm&&rKm.reauth_required===true&&rKm.re
 ok('4b criarOSEmergencia protegida',rEmg&&rEmg.reauth_required===true&&rEmg.retryable===false,JSON.stringify(rEmg));
 ok('4c dispatcher encaminha token para KM pendente',/getOSsPendentesKMFinal\(p\[0\],\s*p\[1\]\)/.test(API));
 
+// 4d. Achado da Cowork 2 (revisao de coerencia do PR#6): cadastrarOuEditarVeiculo
+// e' a unica funcao na mesma categoria de iniciarOS/encerrarOS (escrita sem
+// operationId) que nao tinha exercicio de runtime nem justificativa
+// documentada para essa ausencia -- quebrava em silencio o proprio criterio
+// que a secao 7 usa pra explicar as exclusoes. Formato leve (igual 4a/4b):
+// so reauth_required/retryable, sem sweep de operation_id, porque a funcao
+// genuinamente nao carrega esse parametro.
+let rVei;
+try{rVei=s.cadastrarOuEditarVeiculo('TEC-1','Nome','Carro','ABC1D23','Modelo',expired)}catch(e){rVei={threw:e.message}}
+ok('4d cadastrarOuEditarVeiculo protegida',rVei&&rVei.reauth_required===true&&rVei.retryable===false,JSON.stringify(rVei));
+
 // 5. Transicao preservada: token continua opcional e contrato segue v1.
 ok('5a FIELD_API_CONTRACT continua v1',/const\s+FIELD_API_CONTRACT\s*=\s*['"]v1['"]/.test(CODIGO));
 ok('5b getOSsPendentes token trailing opcional',/function\s+getOSsPendentesKMFinal\(tecnicoId,\s*token\)/.test(CODIGO));
