@@ -178,4 +178,29 @@ checkWriteGuardExpired('retomarOSComSessao',
   ()=>s.retomarOSComSessao('OS-1','TEC-1','Nome','OP-W12','DEV-1',expired),'OP-W12');
 ok('retomarOSComSessao (expirado): zero delegacao',calls.length===0,JSON.stringify(calls));
 
+// 8. Achado da Cowork 2 (leitura estatica de test-frente-d-migracao-
+// restante.js): os cenarios de idempotencia daquele arquivo nunca
+// combinam token + posse negada + RETRY com o MESMO operationId --
+// fecha a lacuna entre aquele arquivo (so idempotencia, sem sessao) e
+// a secao 6 daqui (so guard, sem retry). Confirma que o guard de
+// sessao+posse roda em TODA chamada, inclusive na 2a tentativa com o
+// mesmo operationId -- nao ha estado/cache no guard em si que possa
+// deixar passar no retry (o guard roda ANTES de qualquer envelope de
+// idempotencia; quem cacheia por operationId e' pausarOS/retomarOS
+// legado, nunca alcancado aqui). verificarPosseOS/pausarOS/retomarOS
+// continuam sobrescritos (spies) da secao 6.
+calls.length=0;
+const rPause1=s.pausarOSComSessao('OS-NEGADA','TEC-1','Nome','Almoco','','OP-RETRY-1','DEV-1',valid);
+const rPause2=s.pausarOSComSessao('OS-NEGADA','TEC-1','Nome','Almoco','','OP-RETRY-1','DEV-1',valid);
+ok('8a pausar: sessao valida + posse negada bloqueia na 1a chamada',rPause1&&rPause1.success===false&&/nao tem posse/i.test(rPause1.erro),JSON.stringify(rPause1));
+ok('8b pausar: retry com o MESMO operationId tambem bloqueia (guard nao depende de cache)',rPause2&&rPause2.success===false&&/nao tem posse/i.test(rPause2.erro),JSON.stringify(rPause2));
+ok('8c pausar: zero delegacao nas 2 chamadas juntas',calls.length===0,JSON.stringify(calls));
+
+calls.length=0;
+const rResume1=s.retomarOSComSessao('OS-NEGADA','TEC-1','Nome','OP-RETRY-2','DEV-1',valid);
+const rResume2=s.retomarOSComSessao('OS-NEGADA','TEC-1','Nome','OP-RETRY-2','DEV-1',valid);
+ok('8d retomar: sessao valida + posse negada bloqueia na 1a chamada',rResume1&&rResume1.success===false&&/nao tem posse/i.test(rResume1.erro),JSON.stringify(rResume1));
+ok('8e retomar: retry com o MESMO operationId tambem bloqueia',rResume2&&rResume2.success===false&&/nao tem posse/i.test(rResume2.erro),JSON.stringify(rResume2));
+ok('8f retomar: zero delegacao nas 2 chamadas juntas',calls.length===0,JSON.stringify(calls));
+
 console.log(`\nREAUTH backend: ${pass} PASS / ${fail} FAIL`);if(fail)process.exitCode=1;
