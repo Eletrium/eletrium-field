@@ -40,3 +40,14 @@ jobs:
           git diff --check
           grep -RIn "if (!identidade.ok) return _recusa(" Código.js HMAC_Onda2.js && exit 1 || true
           test ! -f HMAC_Reauth.js
+
+      - name: Export prospective runtime patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: g5-reauth-prospective-runtime-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            Código.js
+            HMAC_Onda2.js
+            API.js
