@@ -17,9 +17,13 @@ const calls = [];
 const sandbox = {
   console,
   verificarTokenSessao(token, tecnicoId) {
-    if (token === 'VALID:' + tecnicoId) return { ok: true };
-    if (token === 'EXPIRED') return { ok: false, erro: 'Token de sessao expirado' };
-    return { ok: false, erro: 'Token de sessao invalido' };
+    if (token === 'VALID:' + tecnicoId) {
+      return { ok: true, session_error: null, reauth_required: false, tecnico_id: tecnicoId };
+    }
+    if (token === 'EXPIRED') {
+      return { ok: false, erro: 'Token de sessao expirado', session_error: 'TOKEN_EXPIRADO', reauth_required: true };
+    }
+    return { ok: false, erro: 'Token de sessao invalido', session_error: 'TOKEN_INVALIDO', reauth_required: false };
   },
   verificarPosseOS(osId, tecnicoId) {
     const dono = tecnicoId === 'TEC-1' && osId !== 'OS-SEM-POSSE';
@@ -29,6 +33,21 @@ const sandbox = {
   },
   _recusa(operationId, erro) {
     return { success: false, operation_id: operationId || null, erro };
+  },
+  // No runtime Apps Script, HMAC_Onda2.js compartilha o namespace global
+  // com Código.js. O contrato REAUTH introduz _recusaSessao em Código.js;
+  // este harness isolado precisa materializar o mesmo global em vez de
+  // fingir que HMAC_Onda2.js roda sozinho.
+  _recusaSessao(operationId, identidade) {
+    const erro = identidade && identidade.erro ? identidade.erro : 'Sessao invalida';
+    return {
+      success: false,
+      operation_id: operationId || null,
+      erro,
+      retryable: false,
+      reauth_required: !!(identidade && identidade.reauth_required),
+      session_error: identidade && identidade.session_error ? identidade.session_error : null,
+    };
   },
   pausarOS(...args) {
     calls.push({ fn: 'pausarOS', args });
@@ -61,20 +80,22 @@ calls.length = 0;
 r = sandbox.pausarOSComSessao('OS-SEM-POSSE', 'TEC-1', 'Nome', 'Almoco', '', 'OP-2B', 'DEV-1', 'VALID:TEC-1');
 check('2b: token valido do proprio tecnico + posse negada bloqueia sem delegar', r.success === false && /nao tem posse/i.test(r.erro) && calls.length === 0, JSON.stringify(r));
 
-// 3) Token invalido bloqueia ANTES da mutacao.
+// 3) Token invalido bloqueia ANTES da mutacao e NAO pede reauth.
 calls.length = 0;
 r = sandbox.pausarOSComSessao('OS-1', 'TEC-1', 'Nome', 'Almoco', '', 'OP-3', 'DEV-1', 'FORGED');
-check('3: pausar com token invalido bloqueia sem delegar', r.success === false && /invalido/i.test(r.erro) && calls.length === 0, JSON.stringify(r));
+check('3a: pausar com token invalido bloqueia sem delegar', r.success === false && /invalido/i.test(r.erro) && calls.length === 0, JSON.stringify(r));
+check('3b: token invalido nao sinaliza reauth', r.reauth_required === false && r.retryable === false, JSON.stringify(r));
 
-// 4) Token expirado bloqueia.
+// 4) Token expirado validamente identificado bloqueia e pede reauth.
 calls.length = 0;
 r = sandbox.retomarOSComSessao('OS-1', 'TEC-1', 'Nome', 'OP-4', 'DEV-1', 'EXPIRED');
-check('4: retomar com token expirado bloqueia', r.success === false && /expirado/i.test(r.erro) && calls.length === 0, JSON.stringify(r));
+check('4a: retomar com token expirado bloqueia', r.success === false && /expirado/i.test(r.erro) && calls.length === 0, JSON.stringify(r));
+check('4b: expirado sinaliza reauth sem retry tecnico', r.reauth_required === true && r.retryable === false && r.session_error === 'TOKEN_EXPIRADO', JSON.stringify(r));
 
 // 5) Token de outro tecnico nao casa com tecnicoId informado.
 calls.length = 0;
 r = sandbox.retomarOSComSessao('OS-1', 'TEC-1', 'Nome', 'OP-5', 'DEV-1', 'VALID:TEC-2');
-check('5: retomar com token de outro tecnico bloqueia', r.success === false && calls.length === 0, JSON.stringify(r));
+check('5: retomar com token de outro tecnico bloqueia', r.success === false && r.reauth_required === false && calls.length === 0, JSON.stringify(r));
 
 // 6) Posse sempre obrigatoria, mesmo durante transicao sem token.
 calls.length = 0;
