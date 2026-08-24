@@ -128,7 +128,7 @@ function executarAcao(action, p) {
       // p[7]=token (Onda 1, Opcao A) -- opcional.
       return registrarKMFinalPendente(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
     case 'getOSsPendentesKMFinal':
-      return getOSsPendentesKMFinal(p[0]);
+      return getOSsPendentesKMFinal(p[0], p[1]);
     // Leitor genérico, só leitura — usado pra verificação por releitura em
     // testes (evita ter que criar/derrubar diagnóstico descartável a cada vez).
     case 'lerCamposOS':

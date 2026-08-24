@@ -936,7 +936,7 @@ function salvarArquivoOS(osId, tecnicoId, campo, base64Data, mimeType, nomeArqui
   // manda token errado/expirado/de outro tecnico e recusado.
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(operationId, identidade);
   }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
@@ -990,7 +990,7 @@ const CONFIRMACOES_SEGURANCA_MIN = ['epi', 'aterramento', 'bloqueio_energia', 's
 function confirmarSegurancaPreExecucao(osId, tecnicoId, confirmacoes, temNaoConformidade, operationId, dispositivoId, token) {
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(operationId, identidade);
   }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
@@ -1044,7 +1044,7 @@ const EPI_ITENS_MIN = ['capacete', 'luvas_isolantes', 'oculos_protecao', 'calcad
 function salvarSelfieEPI(osId, tecnicoId, base64Selfie, mimeType, epiChecklist, diarioTexto, operationId, dispositivoId, token) {
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(operationId, identidade);
   }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
@@ -1272,6 +1272,24 @@ function _recusa(operationId, erro, extras) {
   return Object.assign(base, extras);
 }
 
+// _recusaSessao — adaptador unico entre identidade HMAC e envelope canonico.
+// `retryable` continua reservado a retry tecnico; reautenticacao e sinal
+// separado. O Field so deve abrir login automaticamente quando
+// reauth_required===true.
+function _recusaSessao(operationId, identidade) {
+  identidade = identidade || {
+    ok: false,
+    session_error: 'SESSAO_INVALIDA',
+    erro: 'Sessao invalida',
+    reauth_required: false
+  };
+  return _recusa(operationId, identidade.erro || 'Sessao invalida', {
+    retryable: false,
+    reauth_required: identidade.reauth_required === true,
+    session_error: identidade.session_error || 'SESSAO_INVALIDA'
+  });
+}
+
 // ─── encontrarOuCriarLinhaDiaria ──────────────────────────────────
 // Achado da varredura de TOCTOU (Cowork 2, 15/08 -- 3a+ ocorrencia do
 // mesmo padrao no dia, elevado a prioridade real): find-or-create
@@ -1444,7 +1462,7 @@ function getOsDoTecnico(tecnicoId, token) {
   // especifica do tecnico. Nao ha conceito de posse de OS nestas funcoes.
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(null, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(null, identidade);
   }
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Ordens_Servico');
@@ -1528,7 +1546,7 @@ function getDiariaTecnico(tecnicoId, token) {
   // especifica do tecnico. Nao ha conceito de posse de OS nestas funcoes.
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(null, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(null, identidade);
   }
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Diaria_Tecnico');
@@ -1581,7 +1599,7 @@ function getDiariaHoje(tecnicoId, token) {
   // e validada ANTES de qualquer leitura da diaria.
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(null, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(null, identidade);
   }
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Diaria_Tecnico');
@@ -1619,7 +1637,7 @@ function registrarInicioDia(tecnicoId, tecnicoNome, usaVeiculo, kmInicial, veicu
   // a transicao. Identidade e validada antes de qualquer mutacao do tecnico.
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(operationId, identidade);
   }
   return executarIdempotente(operationId, 'APONTAMENTO', '', tecnicoId, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -1652,7 +1670,7 @@ function registrarFimDia(tecnicoId, kmFinal, operationId, dispositivoId, token) 
   // a transicao. Identidade e validada antes de qualquer mutacao do tecnico.
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(operationId, identidade);
   }
   return executarIdempotente(operationId, 'APONTAMENTO', '', tecnicoId, dispositivoId, () => {
   const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -1714,7 +1732,7 @@ function registrarUsoVeiculo(tecnicoId, usaVeiculo) {
 function iniciarOS(osId, tecnicoId, tecnicoNome, local, token) {
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(null, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(null, identidade);
   }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(null, posse.erro);
@@ -2035,7 +2053,7 @@ function canCloseOS(osId, dadosPendentes) {
 function encerrarOS(osId, tecnicoId, tecnicoNome, dadosEnc, token) {
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(null, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(null, identidade);
   }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(null, posse.erro);
@@ -2150,7 +2168,13 @@ function encerrarOS(osId, tecnicoId, tecnicoNome, dadosEnc, token) {
 function criarOSEmergencia(dados) {
   const operationId = dados && dados.operationId;
   const dispositivoId = dados && dados.dispositivoId;
-  return executarIdempotente(operationId, 'APONTAMENTO', '', dados && dados.tecnicoId, dispositivoId, () => {
+  const tecnicoId = dados && dados.tecnicoId;
+  const token = dados && dados.token;
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusaSessao(operationId, identidade);
+  }
+  return executarIdempotente(operationId, 'APONTAMENTO', '', tecnicoId, dispositivoId, () => {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const now = new Date();
     // Granularidade de minuto colidia em chamadas rapidas (achado real em teste,
@@ -2391,7 +2415,7 @@ function salvarResposta(osId, idSharePointOS, perguntaId, textoPergunta,
                         resposta, fotoUrl, tecnico, geraNC, operationId, dispositivoId, tecnicoId, token) {
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(operationId, identidade);
   }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
@@ -2498,7 +2522,7 @@ function _ultimaRespostaPorPergunta(respostas, idxPerg, idxTimestamp) {
 function fecharFaseChecklist(osId, tecnicoId, fase, operationId, dispositivoId, token) {
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(operationId, identidade);
   }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
@@ -2702,26 +2726,52 @@ function emitirTokenSessao(tecnicoId) {
 // comparar contra a OS, nunca prova quem esta do outro lado da chamada).
 function verificarTokenSessao(token, tecnicoIdEsperado) {
   const segredo = PropertiesService.getScriptProperties().getProperty(SESSAO_SEGREDO_PROPERTY);
-  if (!segredo || !token) return { ok: false, erro: 'Token de sessao ausente' };
+  const falha = (sessionError, erro, reauthRequired) => ({
+    ok: false,
+    session_error: sessionError,
+    erro: erro,
+    reauth_required: reauthRequired === true
+  });
+
+  if (!segredo) return falha('CONFIGURACAO_AUSENTE', 'Sessao indisponivel: segredo HMAC nao configurado', false);
+  if (!token) return falha('TOKEN_AUSENTE', 'Token de sessao ausente', false);
 
   const partes = String(token).split('.');
-  if (partes.length < 3) return { ok: false, erro: 'Token de sessao malformado' };
+  if (partes.length < 3) return falha('TOKEN_MALFORMADO', 'Token de sessao malformado', false);
   const sig = partes.pop();
   const expiraEm = partes.pop();
   const tecnicoIdToken = partes.join('.');
+  if (!tecnicoIdToken || !/^\d+$/.test(String(expiraEm))) {
+    return falha('TOKEN_MALFORMADO', 'Token de sessao malformado', false);
+  }
 
+  // 1) assinatura valida prova que payload/expiracao vieram de quem possui
+  // o segredo. Token forjado nunca pode induzir UX de re-login normal.
   const payload = tecnicoIdToken + '.' + expiraEm;
   const sigEsperada = _bytesParaHex(Utilities.computeHmacSha256Signature(payload, segredo));
   if (!_hexIgualConstante(sigEsperada.toLowerCase(), String(sig).trim().toLowerCase())) {
-    return { ok: false, erro: 'Token de sessao invalido' };
+    return falha('ASSINATURA_INVALIDA', 'Token de sessao invalido', false);
   }
-  if (!/^\d+$/.test(expiraEm) || Math.floor(Date.now() / 1000) > Number(expiraEm)) {
-    return { ok: false, erro: 'Token de sessao expirado' };
-  }
+
+  // 2) identidade ANTES do relogio: token autentico de X usado como Y e
+  // spoof, mesmo se esse token tambem estiver expirado.
   if (String(tecnicoIdToken) !== String(tecnicoIdEsperado)) {
-    return { ok: false, erro: 'Token de sessao nao corresponde ao tecnico informado' };
+    return falha('IDENTIDADE_DIVERGENTE', 'Token de sessao nao corresponde ao tecnico informado', false);
   }
-  return { ok: true };
+
+  // 3) so depois de estrutura+assinatura+identidade confirmadas, expiracao
+  // vira rotina recuperavel por reautenticacao.
+  if (Math.floor(Date.now() / 1000) > Number(expiraEm)) {
+    return falha('TOKEN_EXPIRADO', 'Token de sessao expirado', true);
+  }
+
+  return {
+    ok: true,
+    session_error: null,
+    reauth_required: false,
+    tecnico_id: String(tecnicoIdToken),
+    expira_em: Number(expiraEm)
+  };
 }
 
 // Ultima linha (a mais recente, append-only) para este Oferta_ID -- o
@@ -3007,7 +3057,7 @@ function registrarMovimentoFerramental(osId, tecnicoId, patrimonioCodigo, tipoMo
 
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(operationId, identidade);
   }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
@@ -3085,7 +3135,7 @@ function getVeiculoDoTecnico(tecnicoId, token) {
   // especifica do tecnico. Nao ha conceito de posse de OS nestas funcoes.
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(null, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(null, identidade);
   }
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Veiculos_Tecnicos');
@@ -3122,7 +3172,7 @@ function cadastrarOuEditarVeiculo(tecnicoId, tecnicoNome, tipoVeiculo, placa, mo
   // especifica do tecnico. Nao ha conceito de posse de OS nestas funcoes.
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(null, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(null, identidade);
   }
   const ss = SpreadsheetApp.openById(SHEET_ID);
   let veiculosSheet = ss.getSheetByName('Veiculos_Tecnicos');
@@ -3374,7 +3424,7 @@ function registrarKMFinalPendente(osId, tecnicoId, kmFinal, justificativaDesvio,
   // fechava o KM final de uma OS que nao era dele.
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(operationId, identidade);
   }
   const posse = verificarPosseOS(osId, tecnicoId);
   if (!posse.ok) return _recusa(operationId, posse.erro);
@@ -3419,7 +3469,11 @@ function registrarKMFinalPendente(osId, tecnicoId, kmFinal, justificativaDesvio,
 // ─── getOSsPendentesKMFinal ───────────────────────────────────────────
 // Alimenta o banner de lembrete: OS Concluida do tecnico, dos ultimos
 // 3 dias, com KM_Inicial_OS preenchido mas KM_Final_OS vazio.
-function getOSsPendentesKMFinal(tecnicoId) {
+function getOSsPendentesKMFinal(tecnicoId, token) {
+  if (token !== undefined) {
+    const identidade = verificarTokenSessao(token, tecnicoId);
+    if (!identidade.ok) return _recusaSessao(null, identidade);
+  }
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Ordens_Servico');
   if (!sheet) return [];

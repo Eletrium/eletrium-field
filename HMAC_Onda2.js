@@ -14,7 +14,7 @@
 function _validarSessaoEPosseOnda2(osId, tecnicoId, operationId, token) {
   if (token !== undefined) {
     const identidade = verificarTokenSessao(token, tecnicoId);
-    if (!identidade.ok) return _recusa(operationId, identidade.erro);
+    if (!identidade.ok) return _recusaSessao(operationId, identidade);
   }
 
   const posse = verificarPosseOS(osId, tecnicoId);
