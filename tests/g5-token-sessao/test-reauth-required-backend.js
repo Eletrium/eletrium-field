@@ -102,4 +102,69 @@ const rResume=s.retomarOSComSessao('OS-NEGADA','TEC-1','Nome','OP-E3-35','DEV-1'
 ok('6c E3-35 retomar: token valido + posse negada bloqueia',rResume&&rResume.success===false&&/nao tem posse/i.test(rResume.erro),JSON.stringify(rResume));
 ok('6d E3-35 retomar: zero delegacao',calls.length===0,JSON.stringify(calls));
 
+// 7. E3-XX (achado do red-team independente do PR#6) — item 9 do contrato
+// ("escrita expirada preserva operationId/payload, sem retry tecnico") so
+// tinha exercicio de runtime pra 2 dos 19 guards (criarOSEmergencia,
+// getOSsPendentesKMFinal). Aqui cobrimos, com execucao real (nao so
+// sweep estrutural), TODOS os guards de sessao que carregam operationId
+// -- os que gravam algo via envelope de idempotencia. iniciarOS/encerrarOS
+// ficam fora de proposito: nunca tiveram parametro operationId (sempre
+// usam _recusaSessao(null, identidade)), entao "preservar operationId"
+// nao se aplica a eles -- documentado, nao esquecido.
+function checkWriteGuardExpired(label, invoke, opId){
+  let r,threw=null;
+  try{r=invoke()}catch(e){threw=e.message}
+  ok(label+': nao chega no downstream (SpreadsheetApp) com token expirado',threw!==('DOWN'),'threw='+threw);
+  ok(label+': reauth_required=true',r&&r.reauth_required===true,JSON.stringify(r));
+  ok(label+': retryable=false',r&&r.retryable===false,JSON.stringify(r));
+  ok(label+': operation_id preservado ('+opId+')',r&&r.operation_id===opId,JSON.stringify(r));
+}
+
+checkWriteGuardExpired('salvarArquivoOS',
+  ()=>s.salvarArquivoOS('OS-1','TEC-1','Laudo_URL','b64data','image/png','arq.png','OP-W1','DEV-1',expired),'OP-W1');
+
+checkWriteGuardExpired('confirmarSegurancaPreExecucao',
+  ()=>s.confirmarSegurancaPreExecucao('OS-1','TEC-1',{epi:true,aterramento:true,bloqueio_energia:true,sinalizacao_area:true},false,'OP-W2','DEV-1',expired),'OP-W2');
+
+checkWriteGuardExpired('salvarSelfieEPI',
+  ()=>s.salvarSelfieEPI('OS-1','TEC-1','b64data','image/png','{}','diario','OP-W3','DEV-1',expired),'OP-W3');
+
+checkWriteGuardExpired('registrarInicioDia',
+  ()=>s.registrarInicioDia('TEC-1','Nome',false,'','','OP-W4','DEV-1',expired),'OP-W4');
+
+checkWriteGuardExpired('registrarFimDia',
+  ()=>s.registrarFimDia('TEC-1','','OP-W5','DEV-1',expired),'OP-W5');
+
+checkWriteGuardExpired('salvarResposta',
+  ()=>s.salvarResposta('OS-1','SP-1','PERG-1','texto','resp','','Nome',false,'OP-W6','DEV-1','TEC-1',expired),'OP-W6');
+
+checkWriteGuardExpired('fecharFaseChecklist',
+  ()=>s.fecharFaseChecklist('OS-1','TEC-1','Execução','OP-W7','DEV-1',expired),'OP-W7');
+
+checkWriteGuardExpired('registrarMovimentoFerramental',
+  ()=>s.registrarMovimentoFerramental('OS-1','TEC-1','PAT-001','Carga',true,'','OP-W8','DEV-1',expired),'OP-W8');
+
+checkWriteGuardExpired('registrarKMFinalPendente',
+  ()=>s.registrarKMFinalPendente('OS-1','TEC-1',100,'','','OP-W9','DEV-1',expired),'OP-W9');
+
+// criarOSEmergencia ja tinha exercicio (secao 4) mas so checava reauth/
+// retryable, nao operation_id -- fechando a lacuna aqui tambem.
+checkWriteGuardExpired('criarOSEmergencia (operation_id)',
+  ()=>s.criarOSEmergencia({tecnicoId:'TEC-1',operationId:'OP-W10',token:expired}),'OP-W10');
+
+// pausarOS/retomarOS (HMAC_Onda2.js) -- secao 6 ja provou posse negada
+// com token VALIDO; aqui e' o caso simetrico que faltava, token EXPIRADO
+// (identidade falha antes mesmo de checar posse). verificarPosseOS e
+// pausarOS/retomarOS continuam sobrescritos (spies) da secao 6 -- serve
+// tambem pra confirmar zero delegacao.
+calls.length=0;
+checkWriteGuardExpired('pausarOSComSessao',
+  ()=>s.pausarOSComSessao('OS-1','TEC-1','Nome','Almoco','','OP-W11','DEV-1',expired),'OP-W11');
+ok('pausarOSComSessao (expirado): zero delegacao',calls.length===0,JSON.stringify(calls));
+
+calls.length=0;
+checkWriteGuardExpired('retomarOSComSessao',
+  ()=>s.retomarOSComSessao('OS-1','TEC-1','Nome','OP-W12','DEV-1',expired),'OP-W12');
+ok('retomarOSComSessao (expirado): zero delegacao',calls.length===0,JSON.stringify(calls));
+
 console.log(`\nREAUTH backend: ${pass} PASS / ${fail} FAIL`);if(fail)process.exitCode=1;
