@@ -49,15 +49,17 @@ function initChecklistSheets() {
 }
 
 // ============================================================
-// PARTE C — Motor de formulario em cascata
+// PARTE C — Motor de formulario em cascata LEGADO
 // ============================================================
+// IMPORTANTE (G5/REAUTH, 21/08/2026): as funcoes abaixo receberam
+// sufixo Legacy para nao colidir no namespace global do Apps Script com
+// as implementacoes autoritativas e protegidas que vivem em Código.js.
+// O dispatcher API.js chama somente as versoes sem sufixo de Código.js.
 
 /**
- * Retorna a primeira pergunta (perguntaAtualId = null)
- * ou a proxima pergunta dado o ID atual e a resposta dada.
- * Chamavel via google.script.run do PWA.
+ * Versao legada: mantida apenas como referencia historica.
  */
-function getProximaPergunta(disciplinaNome, perguntaAtualId, respostaDada) {
+function getProximaPerguntaLegacy(disciplinaNome, perguntaAtualId, respostaDada) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sh = ss.getSheetByName('Perguntas_Checklist');
   const dados = sh.getDataRange().getValues();
@@ -88,17 +90,17 @@ function getProximaPergunta(disciplinaNome, perguntaAtualId, respostaDada) {
   if (candidatas.length === 0) return null;
 
   candidatas.sort(function(a, b) { return a[iOrdem] - b[iOrdem]; });
-  return montarObjetoPergunta(candidatas[0], h);
+  return montarObjetoPerguntaLegacy(candidatas[0], h);
 }
 
-function montarObjetoPergunta(row, headers) {
+function montarObjetoPerguntaLegacy(row, headers) {
   const obj = {};
   headers.forEach(function(h, i) { obj[h] = row[i]; });
-  obj.opcoes = getOpcoesDaPergunta(obj['ID_Pergunta']);
+  obj.opcoes = getOpcoesDaPerguntaLegacy(obj['ID_Pergunta']);
   return obj;
 }
 
-function getOpcoesDaPergunta(perguntaId) {
+function getOpcoesDaPerguntaLegacy(perguntaId) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sh = ss.getSheetByName('Opcoes_Resposta');
   const dados = sh.getDataRange().getValues();
@@ -118,11 +120,12 @@ function getOpcoesDaPergunta(perguntaId) {
 }
 
 /**
- * Salva resposta do tecnico na aba Checklist_Respostas.
- * Chamavel via google.script.run do PWA.
+ * Versao legada: sem dispatcher/call-site publico; mantida somente como
+ * referencia para dados antigos. A escrita real e salvarResposta() em
+ * Código.js, com posse, HMAC e idempotencia.
  */
-function salvarResposta(osId, idSharePointOS, perguntaId, textoPergunta,
-                        resposta, fotoUrl, tecnico, geraNC) {
+function salvarRespostaLegacy(osId, idSharePointOS, perguntaId, textoPergunta,
+                              resposta, fotoUrl, tecnico, geraNC) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sh = ss.getSheetByName('Checklist_Respostas');
   sh.appendRow([
