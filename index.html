@@ -124,6 +124,13 @@ input[type=range]{width:100%;height:44px;accent-color:var(--green);cursor:pointe
    "sem sinal agora". */
 #pendente-envio-banner{display:none;background:var(--red);color:#fff;text-align:center;font-size:12px;font-weight:700;padding:6px}
 #pendente-envio-banner.show{display:block}
+/* Contrato REAUTH_REQUIRED (21/08, G5-DECISAO-CONTRATO-REAUTH-REQUIRED.md)
+   -- aviso persistente e tocavel (retry manual, sem popup forcado) quando
+   uma leitura foi cancelada sem renovar a sessao (E3-14) ou uma escrita
+   ficou bloqueada por sessao no outbox. Mesmo padrao visual dos outros
+   2 banners deste grupo. */
+#sessao-expirada-banner{display:none;background:var(--yellow);color:#000;text-align:center;font-size:12px;font-weight:700;padding:6px;cursor:pointer}
+#sessao-expirada-banner.show{display:block}
 #build-id{position:fixed;bottom:2px;right:6px;font-size:9px;color:var(--gray);opacity:.5;z-index:50;pointer-events:none;font-family:monospace;white-space:nowrap}
 #scr-bloqueio-contrato{display:none;position:fixed;inset:0;background:var(--bg);z-index:1001;align-items:center;justify-content:center;flex-direction:column;padding:24px}
 #scr-bloqueio-contrato.show{display:flex}
@@ -134,6 +141,7 @@ input[type=range]{width:100%;height:44px;accent-color:var(--green);cursor:pointe
 <div id="banners-topo">
   <div id="offline-banner">SEM CONEXÃO — dados serão enviados quando o sinal voltar</div>
   <div id="pendente-envio-banner"></div>
+  <div id="sessao-expirada-banner" onclick="_solicitarReautenticacao()"></div>
 </div>
 <div id="loading"><div class="spinner"></div><div class="loading-msg" id="loading-msg">Aguarde...</div></div>
 <div id="toast"></div>
@@ -244,6 +252,32 @@ input[type=range]{width:100%;height:44px;accent-color:var(--green);cursor:pointe
     </div>
     <div id="pin-erro" class="alert alert-err" style="display:none">PIN incorreto. Tente novamente.</div>
     <button class="btn btn-green" onclick="confirmarPin()">ENTRAR</button>
+  </div>
+</div>
+
+<!-- TELA REAUTENTICACAO: contrato REAUTH_REQUIRED (21/08). Distinta do
+     login normal (scr-pin) -- reautenticar NAO navega o app (nao chama
+     _entrarConfirmado/getDiariaHoje/carregarHome), so renova o token e
+     devolve o controle pra quem chamou _solicitarReautenticacao(), que
+     decide se repete a leitura ou reenvia a escrita. -->
+<div id="scr-reautenticar" class="screen">
+  <div class="hdr">
+    <div style="flex:1">
+      <div class="hdr-title">Sessão expirada</div>
+      <div class="hdr-sub" id="reautenticar-tecnico-nome"></div>
+    </div>
+  </div>
+  <div class="content">
+    <div style="font-size:13px;color:var(--text2);margin-bottom:16px">Digite seu PIN novamente para continuar.</div>
+    <div class="form-group">
+      <input class="form-input" type="password" inputmode="numeric" pattern="[0-9]*"
+             id="reautenticar-pin-input" maxlength="4" placeholder="••••"
+             style="text-align:center;font-size:32px;letter-spacing:12px"
+             autocomplete="off">
+    </div>
+    <div id="reautenticar-erro" class="alert alert-err" style="display:none">PIN incorreto. Tente novamente.</div>
+    <button class="btn btn-green" onclick="confirmarReautenticacao()">ENTRAR</button>
+    <button class="btn btn-gray btn-sm" onclick="cancelarReautenticacao()">Cancelar</button>
   </div>
 </div>
 
@@ -914,6 +948,25 @@ function obterDispositivoId() {
   return id;
 }
 
+// ================================================================
+// TOKEN DE SESSÃO — contrato REAUTH_REQUIRED (21/08,
+// G5-DECISAO-CONTRATO-REAUTH-REQUIRED.md, decisão do owner,
+// pré-enforcement). Mesmo padrão de obterDispositivoId() -- persiste em
+// localStorage pra sobreviver a reload, cacheado em APP.tokenSessao pra
+// nao ler localStorage a toda chamada.
+// ================================================================
+function obterTokenSessao() {
+  if (APP.tokenSessao) return APP.tokenSessao;
+  const t = localStorage.getItem('eletrium_token_sessao');
+  if (t) APP.tokenSessao = t;
+  return APP.tokenSessao || null;
+}
+function salvarTokenSessao(token) {
+  APP.tokenSessao = token || null;
+  if (token) localStorage.setItem('eletrium_token_sessao', token);
+  else localStorage.removeItem('eletrium_token_sessao');
+}
+
 function abrirDB() {
   if (dbPromise) return dbPromise;
   // D7-08: gsCallIdempotente agora chama registrarIntencaoLocal ANTES
@@ -970,6 +1023,14 @@ async function enfileirarChamadaComId(operationId, action, params, tipoOperacao,
   const item = {
     operationId, action, params, tipoOperacao: tipoOperacao || '', osId: osId || '',
     status, tentativas: 0,
+    // Isolamento por técnico (E3-20/21, G5-DECISAO-CONTRATO-REAUTH-
+    // REQUIRED.md) -- captura quem estava logado NO MOMENTO em que a
+    // intenção foi registrada, não threadeado por todo call site: se
+    // outro técnico logar neste aparelho depois, este item não pode ser
+    // reenviado nem exibido sob a identidade nova (ver
+    // _pertenceAoTecnicoAtual). null preserva compat com item antigo
+    // (schema anterior a este campo, sempre visível/processável).
+    tecnicoId: (APP.tecnico && APP.tecnico.id) || null,
     criadoEm: agora, enviadoEm: null, recebidoEm: null, sincronizadoEm: null,
     proximaTentativaEm: agora, erroDetalhe: null,
   };
@@ -1080,6 +1141,17 @@ function proximoBackoffMs(tentativas) {
 // é falha transitória (mesmo tratamento de erro de rede, backoff e
 // tenta de novo sozinho) ou recusa de regra de negócio (DIVERGENT,
 // precisa de ação humana, nunca retry automático).
+// Isolamento por técnico (E3-20/21, G5-DECISAO-CONTRATO-REAUTH-
+// REQUIRED.md): "login de um técnico diferente no mesmo aparelho não
+// dispara nem mostra a fila do técnico anterior". item.tecnicoId===null
+// é item de schema antigo (anterior a este campo) -- tratado como
+// visível/processável por qualquer um, preserva o comportamento já
+// existente pra dado que já estava no IndexedDB antes desta mudança.
+function _pertenceAoTecnicoAtual(item) {
+  if (!item.tecnicoId) return true;
+  return !!APP.tecnico && item.tecnicoId === APP.tecnico.id;
+}
+
 async function processarFilaOffline() {
   const fila = await listarFila();
   const agora = Date.now();
@@ -1090,8 +1162,13 @@ async function processarFilaOffline() {
     // vivo original pode estar genuinamente em voo agora mesmo, na
     // MESMA sessão). Só reconciliarIntencoesOrfas/reconciliarUploadsOrfaos
     // (chamadas no boot) decidem o que fazer com elas.
+    // REAUTH_BLOQUEADO só sai desse estado via
+    // retomarOperacoesBloqueadasPorSessao() (depois de uma reautenticação
+    // bem-sucedida do MESMO técnico) -- nunca pelo scanner de retry normal.
     if (item.status === 'SYNCED' || item.status === 'RECONCILED' || item.status === 'DIVERGENT'
-      || item.status === 'LOCAL_PENDING' || item.status === 'LOCAL_PENDING_UPLOAD') continue;
+      || item.status === 'LOCAL_PENDING' || item.status === 'LOCAL_PENDING_UPLOAD'
+      || item.status === 'REAUTH_BLOQUEADO') continue;
+    if (!_pertenceAoTecnicoAtual(item)) continue; // técnico diferente logado agora -- não dispara
     if (item.proximaTentativaEm && item.proximaTentativaEm > agora) continue; // ainda no backoff
 
     await atualizarItemFila(item.id, { status: 'SENDING', enviadoEm: Date.now() });
@@ -1121,6 +1198,19 @@ async function processarFilaOffline() {
       await atualizarItemFila(item.id, { status: 'SYNCED', sincronizadoEm: Date.now() });
       await removerItemFila(item.id); // fila só guarda pendente; SYNCED sai (Log_Central do backend é o histórico)
     } catch (err) {
+      if (err && err.reauthRequired === true) {
+        // Eixo 3 (escritas) do contrato: NÃO descarta, NÃO gera
+        // operationId novo, NÃO conta como tentativa/backoff técnico,
+        // fica bloqueada por sessão (metadado LOCAL -- este status é do
+        // outbox do Field, nunca chega no Log_Central do backend, que
+        // nem processou esta operação ainda). Pede reautenticação
+        // (mostra o banner tocável -- não interrompe o técnico à força
+        // no meio de outra tela por causa de uma escrita em segundo
+        // plano) e retoma quando o MESMO técnico renovar a sessão.
+        await atualizarItemFila(item.id, { status: 'REAUTH_BLOQUEADO' });
+        _mostrarSessaoNaoRenovada();
+        continue;
+      }
       const tentativas = (item.tentativas || 0) + 1;
       await atualizarItemFila(item.id, {
         status: 'SYNC_ERROR', tentativas,
@@ -1131,6 +1221,23 @@ async function processarFilaOffline() {
     }
   }
   atualizarBannerPendenteEnvio();
+}
+
+// Chamada depois de uma reautenticação bem-sucedida (ver
+// _solicitarReautenticacao) -- promove de volta pra QUEUED só os itens
+// REAUTH_BLOQUEADO do técnico ATUAL (preserva operationId/params/
+// tentativas intactos, só reresseta proximaTentativaEm) e manda
+// processarFilaOffline reenviar -- o interceptor injeta o token novo no
+// momento do envio, não precisa reconstruir o item.
+async function retomarOperacoesBloqueadasPorSessao() {
+  if (!APP.tecnico) return;
+  const fila = await listarFila();
+  const bloqueadas = fila.filter(i => i.status === 'REAUTH_BLOQUEADO' && _pertenceAoTecnicoAtual(i));
+  if (!bloqueadas.length) return;
+  for (const item of bloqueadas) {
+    await atualizarItemFila(item.id, { status: 'QUEUED', proximaTentativaEm: 0 });
+  }
+  await processarFilaOffline();
 }
 
 // ================================================================
@@ -1149,7 +1256,7 @@ async function processarFilaOffline() {
 // LOCAL_PENDING ANTES de rodar fn(), não depois).
 async function reconciliarIntencoesOrfas() {
   const fila = await listarFila();
-  const orfas = fila.filter(i => i.status === 'LOCAL_PENDING');
+  const orfas = fila.filter(i => i.status === 'LOCAL_PENDING' && _pertenceAoTecnicoAtual(i));
   for (const item of orfas) {
     let resposta = null;
     try {
@@ -1178,7 +1285,7 @@ async function reconciliarIntencoesOrfas() {
 // técnico via toast, em vez de deixar a dúvida pra sempre.
 async function reconciliarUploadsOrfaos() {
   const fila = await listarFila();
-  const orfas = fila.filter(i => i.status === 'LOCAL_PENDING_UPLOAD');
+  const orfas = fila.filter(i => i.status === 'LOCAL_PENDING_UPLOAD' && _pertenceAoTecnicoAtual(i));
   for (const item of orfas) {
     let resposta = null;
     try {
@@ -1208,9 +1315,15 @@ async function reconciliarUploadsOrfaos() {
 // diferente do status do Log_Central). resumoFila() traduz o estado
 // real da fila pra 3 situações que fazem sentido em campo.
 async function resumoFila() {
-  const fila = await listarFila();
+  // Isolamento por técnico (E3-20/21) -- não mostra a fila do técnico
+  // anterior: item de outro técnico simplesmente não entra na conta.
+  const fila = (await listarFila()).filter(_pertenceAoTecnicoAtual);
   const divergentes = fila.filter(i => i.status === 'DIVERGENT');
-  const pendentes = fila.filter(i => i.status !== 'DIVERGENT'); // QUEUED/SENDING/RECEIVED/SYNC_ERROR -- ainda tentando, retry automático já cobre
+  // QUEUED/SENDING/RECEIVED/SYNC_ERROR -- ainda tentando, retry automático já cobre.
+  // REAUTH_BLOQUEADO conta aqui também -- não é recusa de negócio (não é
+  // DIVERGENT), é uma escrita genuinamente pendente esperando login de
+  // novo, mesmo risco de perda silenciosa que qualquer outro pendente.
+  const pendentes = fila.filter(i => i.status !== 'DIVERGENT');
   if (!divergentes.length && !pendentes.length) return { estado: 'sincronizado' };
   if (divergentes.length) return { estado: 'divergente', n: divergentes.length, nPendentes: pendentes.length };
   return { estado: 'pendente', n: pendentes.length };
@@ -1305,7 +1418,7 @@ async function tentarNovamenteDivergentes() {
 // tag <script> comum não sofre esse bloqueio — por isso usamos
 // esse formato em vez de fetch() para falar com o Apps Script.
 let jsonpContador = 0;
-function gsCallReal(action, params) {
+function _jsonpBruto(action, params) {
   return new Promise((resolve, reject) => {
     const nomeCallback = 'gsCallback_' + (jsonpContador++);
     const script = document.createElement('script');
@@ -1345,6 +1458,153 @@ function gsCallReal(action, params) {
     script.src = url;
     document.body.appendChild(script);
   });
+}
+
+// ================================================================
+// INTERCEPTOR CENTRAL DE SESSÃO — contrato REAUTH_REQUIRED (21/08,
+// G5-DECISAO-CONTRATO-REAUTH-REQUIRED.md, decisão do owner,
+// pré-enforcement). "A interpretação de reauth_required deve ficar na
+// camada comum de chamadas/transporte do Field, não copiada
+// manualmente em cada tela" -- gsCall/gsCallIdempotente/
+// processarFilaOffline/reconciliarIntencoesOrfas/
+// reconciliarUploadsOrfaos já delegam TODOS pra gsCallReal (única
+// exceção real: enviarPOSTNoCors/capturarEUpload, que usa fetch
+// no-cors direto pro upload de Laudo/Assinatura/Selfie/foto de KM --
+// resposta opaca, reauth_required nesse caminho só pode ser descoberto
+// via o poll de consultarStatusOperacao, que passa por aqui
+// normalmente; achado registrado, não coberto nesta rodada).
+//
+// gsCallReal agora tem 2 responsabilidades além de só chamar o JSONP
+// bruto:
+// 1. Anexa o token de sessão vigente como ÚLTIMO parâmetro da chamada
+//    (achado ao ler HMAC_Reauth.js/SESSAO_DISPATCHER_POLITICAS no
+//    branch chatgpt/g5-reauth-backend-20260821 do repo backend: em
+//    toda action protegida, o índice do token é exatamente
+//    params.length de hoje -- ex. registrarInicioDia(tecnicoId,
+//    tecnicoNome, usaVeiculo, kmInicial, veiculoId, operationId,
+//    dispositivoId) tem 7 params (0-6) e a política lista token:7, um
+//    a mais que o último existente. Vale pra toda entrada da tabela
+//    checada. Sem token local (pré-login ou pré-rollout), nada é
+//    anexado -- params sai idêntico a hoje, e o backend trata
+//    token===undefined como "sem sessão", comportamento antigo
+//    preservado). Ações não listadas na política do backend
+//    simplesmente ignoram esse parâmetro extra.
+// 2. Depois que o backend responde, verifica reauth_required===true
+//    (Eixo 1 do contrato: campo booleano dedicado, nunca status nem
+//    error_code) e, se for o caso, transforma isso num erro tipado
+//    (err.reauthRequired=true) em vez de deixar a chamada "resolver
+//    normalmente" com um envelope de recusa que cada tela teria que
+//    saber reconhecer sozinha.
+function gsCallReal(action, params) {
+  const token = obterTokenSessao();
+  const paramsFinal = token ? (params || []).concat([token]) : (params || []);
+  return _jsonpBruto(action, paramsFinal).then(resultado => {
+    if (resultado && resultado.reauth_required === true) {
+      const err = new Error((resultado && resultado.erro) || 'Sessao expirada');
+      err.reauthRequired = true;
+      err.recusaOriginal = resultado;
+      throw err;
+    }
+    return resultado;
+  });
+}
+
+// ================================================================
+// FLUXO CENTRAL DE REAUTENTICAÇÃO — Eixo 3 do contrato (leituras) +
+// E3-14/E3-14b (G5-DECISOES-E3-REAUTH-UX.md). Uma ÚNICA promessa
+// compartilhada (_reautenticacaoEmAndamento) -- se N chamadas falharem
+// quase juntas pelo mesmo motivo (mesmo timeout de sessão), só 1
+// prompt de PIN aparece, e todas esperam o mesmo resultado.
+// ================================================================
+let _reautenticacaoEmAndamento = null;
+function _solicitarReautenticacao() {
+  if (_reautenticacaoEmAndamento) return _reautenticacaoEmAndamento;
+  salvarTokenSessao(null); // token expirado -- limpa localmente antes de pedir um novo
+  const telaAtiva = document.querySelector('.screen.active');
+  const telaAnterior = telaAtiva ? telaAtiva.id : 'scr-home';
+  document.getElementById('reautenticar-tecnico-nome').textContent = APP.tecnico ? APP.tecnico.nome.split(' ')[0] : '';
+  document.getElementById('reautenticar-pin-input').value = '';
+  document.getElementById('reautenticar-erro').style.display = 'none';
+  showScreen('scr-reautenticar');
+  setTimeout(() => { const el = document.getElementById('reautenticar-pin-input'); if (el) el.focus(); }, 150);
+  _reautenticacaoEmAndamento = new Promise((resolve) => {
+    APP._reauthResolve = (sucesso) => {
+      APP._reauthResolve = null;
+      _reautenticacaoEmAndamento = null;
+      showScreen(telaAnterior);
+      if (sucesso) { _esconderSessaoNaoRenovada(); retomarOperacoesBloqueadasPorSessao(); }
+      else { _mostrarSessaoNaoRenovada(); }
+      resolve(sucesso);
+    };
+  });
+  return _reautenticacaoEmAndamento;
+}
+// validarPin não é uma action protegida (SESSAO_DISPATCHER_POLITICAS,
+// backend) -- chamada via _jsonpBruto direto, não gsCallReal, pra não
+// arriscar o próprio pedido de renovação de token cair de novo no
+// interceptor de reauth_required.
+function confirmarReautenticacao() {
+  const pin = document.getElementById('reautenticar-pin-input').value.trim();
+  if (!pin) { toast('Digite o PIN', true); return; }
+  if (!APP.tecnico) { if (APP._reauthResolve) APP._reauthResolve(false); return; }
+  showLoading('Verificando...');
+  _jsonpBruto('validarPin', [APP.tecnico.id, pin]).then(res => {
+    hideLoading();
+    if (!res || res.valido !== true) {
+      document.getElementById('reautenticar-erro').style.display = 'flex';
+      document.getElementById('reautenticar-erro').textContent = (res && res.erro) ? res.erro : 'PIN incorreto. Tente novamente.';
+      document.getElementById('reautenticar-pin-input').value = '';
+      return;
+    }
+    if (res.token) salvarTokenSessao(res.token);
+    if (APP._reauthResolve) APP._reauthResolve(true);
+  }).catch(() => {
+    hideLoading();
+    document.getElementById('reautenticar-erro').style.display = 'flex';
+    document.getElementById('reautenticar-erro').textContent = 'Sem conexao para verificar o PIN. Tente novamente com sinal.';
+  });
+}
+// E3-14: cancelar aborta a leitura/escrita pendente, não fica esperando
+// indefinidamente e não faz replay automático.
+function cancelarReautenticacao() {
+  if (APP._reauthResolve) APP._reauthResolve(false);
+}
+function _mostrarSessaoNaoRenovada() {
+  const el = document.getElementById('sessao-expirada-banner');
+  if (!el) return;
+  el.textContent = 'Sessão não renovada. Toque aqui para entrar novamente.';
+  el.classList.add('show');
+}
+function _esconderSessaoNaoRenovada() {
+  const el = document.getElementById('sessao-expirada-banner');
+  if (el) el.classList.remove('show');
+}
+
+// leituraComReauth -- wrapper genérico pra leituras síncronas (E3-11/
+// 12/13): interrompe a transição dependente, pede login, repete a
+// MESMA leitura uma única vez se a reautenticação funcionar, nunca
+// entra em loop. getDiariaHoje NÃO usa isto -- tem tratamento próprio
+// (E3-14b, ver _tentarGetDiariaHoje) porque não existe tela estável
+// segura pra onde voltar nesse caso específico (bootstrap do login).
+async function leituraComReauth(fnLeitura) {
+  try {
+    return await fnLeitura();
+  } catch (err) {
+    if (!err || err.reauthRequired !== true) throw err;
+    const tecnicoOriginal = APP.tecnico ? APP.tecnico.id : null;
+    const sucesso = await _solicitarReautenticacao();
+    if (!sucesso || !APP.tecnico || APP.tecnico.id !== tecnicoOriginal) {
+      throw Object.assign(new Error('Sessao nao renovada'), { reauthCancelado: true });
+    }
+    try {
+      return await fnLeitura(); // replay ÚNICO -- um 2º reauth_required aqui não tenta de novo
+    } catch (err2) {
+      if (err2 && err2.reauthRequired === true) {
+        throw Object.assign(new Error('Sessao expirou de novo'), { reauthLoopEvitado: true });
+      }
+      throw err2;
+    }
+  }
 }
 
 // Chamada "principal": tenta na hora. Se falhar (sem sinal),
@@ -1749,6 +2009,10 @@ const APP = {
   timerInterval: null, timerSec: 0, motivoSelecionado: null,
   usaVeiculoHoje: null, kmInicial: null, veiculo: undefined,
   veiculoOrigem: 'scr-home',
+  // Contrato REAUTH_REQUIRED (21/08) -- token de sessão em cache (ver
+  // obterTokenSessao/salvarTokenSessao) + callback pendente de
+  // _solicitarReautenticacao() (ver bloco INTERCEPTOR mais abaixo).
+  tokenSessao: null, _reauthResolve: null,
   // Frente B, fatia 4 (Diretriz v1.1) -- foto do desvio de KM. telaKmModo
   // distingue as 2 telas que compartilham #scr-iniciar-km (iniciar OS
   // nova vs. preencher KM final pendente de OS ja concluida), porque
@@ -1873,12 +2137,13 @@ function responderVeiculo(usa) {
   }
   if (APP.veiculo !== undefined) { _mostrarFluxoKM(APP.veiculo); return; }
   showLoading('Verificando veiculo...');
-  gsCall('getVeiculoDoTecnico', [APP.tecnico.id]).then(v => {
+  leituraComReauth(() => gsCall('getVeiculoDoTecnico', [APP.tecnico.id])).then(v => {
     hideLoading();
     APP.veiculo = v;
     _mostrarFluxoKM(v);
-  }).catch(() => {
+  }).catch(err => {
     hideLoading();
+    if (err && err.reauthCancelado) return; // já voltou pra tela estável anterior (E3-14)
     document.getElementById('card-km').style.display = 'block';
     setTimeout(() => document.getElementById('inicio-km').focus(), 100);
   });
@@ -2049,11 +2314,48 @@ function _entrarConfirmado(tec) {
   APP.tecnico = tec;
   localStorage.setItem('eletrium_tecnico', JSON.stringify(tec));
   showLoading('Verificando dia...');
-  gsCall('getDiariaHoje', [tec.id]).then(diaria => {
+  _tentarGetDiariaHoje(tec, false);
+}
+// E3-14b (G5-DECISOES-E3-REAUTH-UX.md) -- getDiariaHoje decide entre
+// Inicio do Dia e Home, então NÃO existe tela operacional segura pra
+// assumir se a sessão expirar bem aqui, no bootstrap do login. Por isso
+// NÃO usa o leituraComReauth genérico (que volta pra "tela estável
+// anterior" -- aqui isso seria scr-pin, o que ia contra a decisão
+// explícita do dono de voltar pro login). Trata reauth_required à parte
+// do catch genérico -- ACHADO/BUG real corrigido aqui: antes, QUALQUER
+// falha (rede, reauth, o que fosse) caía direto em carregarHome() como
+// fallback, sem nenhuma resposta autoritativa sobre a diária -- exatamente
+// o que E3-14b proíbe pro caso de reauth.
+async function _tentarGetDiariaHoje(tec, jaTentouReauth) {
+  try {
+    const diaria = await gsCall('getDiariaHoje', [tec.id]);
     hideLoading();
     if (!diaria || !diaria.existe) { irParaInicioDia(); }
     else { APP.usaVeiculoHoje = diaria.usaVeiculo; APP.kmInicial = diaria.kmInicial; carregarHome(); }
-  }).catch(() => { hideLoading(); carregarHome(); });
+  } catch (err) {
+    if (err && err.reauthRequired === true) {
+      hideLoading();
+      if (!jaTentouReauth) {
+        const sucesso = await _solicitarReautenticacao();
+        if (sucesso && APP.tecnico && APP.tecnico.id === tec.id) {
+          showLoading('Verificando dia...');
+          _tentarGetDiariaHoje(tec, true); // replay ÚNICO
+          return;
+        }
+      }
+      // Cancelou, trocou de técnico no meio, ou expirou de novo mesmo
+      // após renovar -- sem loop, sem inferir Inicio-Dia/Home. Técnico
+      // fica só como conveniência visual (nome pré-preenchido), a
+      // sessão NÃO é tratada como autenticada.
+      APP.tecnico = null;
+      localStorage.removeItem('eletrium_tecnico');
+      document.getElementById('login-nome-input').value = tec.nome || '';
+      showScreen('scr-login');
+      return;
+    }
+    hideLoading();
+    carregarHome(); // comportamento antigo preservado -- só pra falha genérica (rede etc.), não reauth
+  }
 }
 
 function logOut() {
@@ -2062,8 +2364,10 @@ function logOut() {
   APP.osList = []; APP.usaVeiculoHoje = null; APP.kmInicial = null;
   APP.veiculo = undefined; APP.veiculoOrigem = 'scr-home';
   localStorage.removeItem('eletrium_tecnico');
+  salvarTokenSessao(null); // sessão do técnico que saiu não pode sobreviver ao logout
   document.getElementById('login-nome-input').value = '';
   showScreen('scr-login'); carregarTecnicos();
+  atualizarBannerPendenteEnvio(); // reflete o técnico novo (ninguém, por ora) -- não mostra fila do técnico anterior
 }
 
 // ================================================================
@@ -2237,8 +2541,15 @@ function carregarHome() {
   document.getElementById('home-sub').textContent = hoje;
   showScreen('scr-home');
   gsCall('getOSsPendentesKMFinal', [APP.tecnico.id]).then(renderBannerKMPendente).catch(() => {});
-  gsCall('getOsDoTecnico', [APP.tecnico.id]).then(renderHome).catch(() => {
+  // Nota: carregarHome() já navegou pra scr-home ANTES desta leitura
+  // (acima) -- "última tela estável anterior" (E3-14) acaba sendo o
+  // próprio scr-home nesse caso específico, não a tela de onde o
+  // técnico veio. Trade-off aceito aqui pra não reordenar a navegação
+  // de carregarHome() nesta rodada -- não afeta a leitura em si (single
+  // replay, sem loop), só o "pra onde volta" se cancelar.
+  leituraComReauth(() => gsCall('getOsDoTecnico', [APP.tecnico.id])).then(renderHome).catch(err => {
     hideLoading();
+    if (err && err.reauthCancelado) return;
     const el = document.getElementById('home-os-lista');
     el.innerHTML = '<div class="card" style="text-align:center;padding:32px">' +
       '<div style="color:var(--yellow)">Sem conexao no momento</div>' +
@@ -3289,9 +3600,13 @@ function voltarMeuVeiculo() {
 function _carregarFormVeiculo() {
   if (APP.veiculo !== undefined) { _renderizarFormVeiculo(APP.veiculo); return; }
   showLoading('Carregando veiculo...');
-  gsCall('getVeiculoDoTecnico', [APP.tecnico.id]).then(v => {
+  leituraComReauth(() => gsCall('getVeiculoDoTecnico', [APP.tecnico.id])).then(v => {
     hideLoading(); APP.veiculo = v; _renderizarFormVeiculo(v);
-  }).catch(() => { hideLoading(); toast('Erro ao carregar dados do veiculo', true); });
+  }).catch(err => {
+    hideLoading();
+    if (err && err.reauthCancelado) return;
+    toast('Erro ao carregar dados do veiculo', true);
+  });
 }
 function _renderizarFormVeiculo(v) {
   const badgeEl = document.getElementById('veiculo-status-badge');
@@ -3549,7 +3864,11 @@ function irParaResumo() {
   showScreen('scr-resumo');
   document.getElementById('resumo-sub').textContent = new Date().toLocaleDateString('pt-BR', {weekday:'long',day:'2-digit',month:'long'});
   showLoading('Carregando resumo...');
-  gsCall('getDiariaTecnico', [APP.tecnico.id]).then(renderResumo).catch(() => { hideLoading(); toast('Erro ao carregar resumo', true); });
+  leituraComReauth(() => gsCall('getDiariaTecnico', [APP.tecnico.id])).then(renderResumo).catch(err => {
+    hideLoading();
+    if (err && err.reauthCancelado) return;
+    toast('Erro ao carregar resumo', true);
+  });
 }
 function renderResumo(diaria) {
   hideLoading();
