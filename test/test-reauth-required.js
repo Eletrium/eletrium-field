@@ -321,6 +321,79 @@ async function main() {
     assert.strictEqual(contarChamadas('getOsDoTecnico'), 2, 'exatamente 2 tentativas (original + replay unico), nunca uma 3a');
   });
 
+  // Achado do dono (26/08, investigação da OS assistida): os 4 call sites
+  // que usam leituraComReauth() distinguiam reauthCancelado (silencioso,
+  // tela já voltou) mas NÃO distinguiam reauthLoopEvitado -- caía no
+  // MESMO texto genérico de qualquer outra falha ("Erro ao carregar...",
+  // "Sem conexao no momento"), sem nenhuma pista de que a causa foi
+  // sessão expirando de novo após já ter renovado uma vez. Baixo risco,
+  // aprovado pelo dono independente de ter sido ou não a causa do achado
+  // #3 (erro ao carregar veículo) da OS assistida.
+  await record('carregarHome(): reauthLoopEvitado -- card mostra "Sessao expirou de novo", nao o texto generico de "sem conexao"', async () => {
+    comportamento = {
+      getOsDoTecnico: { reauth_required: true, retryable: false, erro: 'expirado' },
+      getOSsPendentesKMFinal: [],
+      validarPin: { valido: true, token: 'tok-loop-home.1.sig' },
+    };
+    ctxCall('carregarHome()');
+    await flush(); await flush(); await flush(); await flush();
+    assert.strictEqual(telaAtivaId(), 'scr-reautenticar');
+    ctxCall("document.getElementById('reautenticar-pin-input').value = '1234'");
+    ctxCall('confirmarReautenticacao()');
+    for (let i = 0; i < 12; i++) await flush();
+    const html = ctxGet("document.getElementById('home-os-lista').innerHTML");
+    assert.ok(html.includes('Sessao expirou de novo'), 'deveria mostrar o texto especifico, nao o generico de rede: ' + html);
+    assert.ok(!html.includes('Sem conexao no momento'), 'nao pode mostrar o texto de rede pra um caso de sessao: ' + html);
+  });
+
+  await record('irParaResumo(): reauthLoopEvitado -- toast especifico, nao "Erro ao carregar resumo"', async () => {
+    comportamento = {
+      getDiariaTecnico: { reauth_required: true, retryable: false, erro: 'expirado' },
+      validarPin: { valido: true, token: 'tok-loop-resumo.1.sig' },
+    };
+    ctxCall('irParaResumo()');
+    await flush(); await flush(); await flush(); await flush();
+    assert.strictEqual(telaAtivaId(), 'scr-reautenticar');
+    ctxCall("document.getElementById('reautenticar-pin-input').value = '1234'");
+    ctxCall('confirmarReautenticacao()');
+    for (let i = 0; i < 12; i++) await flush();
+    const texto = ctxGet("document.getElementById('toast').textContent");
+    assert.ok(texto.toLowerCase().includes('sessao expirou de novo'), 'texto do toast: ' + texto);
+  });
+
+  await record('_carregarFormVeiculo(): reauthLoopEvitado -- toast especifico, nao "Erro ao carregar dados do veiculo" (achado #3 da OS assistida)', async () => {
+    ctxSet('APP.veiculo', undefined);
+    comportamento = {
+      getVeiculoDoTecnico: { reauth_required: true, retryable: false, erro: 'expirado' },
+      validarPin: { valido: true, token: 'tok-loop-veiculo.1.sig' },
+    };
+    ctxCall('_carregarFormVeiculo()');
+    await flush(); await flush(); await flush(); await flush();
+    assert.strictEqual(telaAtivaId(), 'scr-reautenticar');
+    ctxCall("document.getElementById('reautenticar-pin-input').value = '1234'");
+    ctxCall('confirmarReautenticacao()');
+    for (let i = 0; i < 12; i++) await flush();
+    const texto = ctxGet("document.getElementById('toast').textContent");
+    assert.ok(texto.toLowerCase().includes('sessao expirou de novo'), 'texto do toast: ' + texto);
+  });
+
+  await record('responderVeiculo(true): reauthLoopEvitado -- toast especifico, nao cai direto no formulario manual de KM', async () => {
+    ctxSet('APP.veiculo', undefined);
+    ctxSet('APP.usaVeiculoHoje', true);
+    comportamento = {
+      getVeiculoDoTecnico: { reauth_required: true, retryable: false, erro: 'expirado' },
+      validarPin: { valido: true, token: 'tok-loop-responder.1.sig' },
+    };
+    ctxCall('responderVeiculo(true)');
+    await flush(); await flush(); await flush(); await flush();
+    assert.strictEqual(telaAtivaId(), 'scr-reautenticar');
+    ctxCall("document.getElementById('reautenticar-pin-input').value = '1234'");
+    ctxCall('confirmarReautenticacao()');
+    for (let i = 0; i < 12; i++) await flush();
+    const texto = ctxGet("document.getElementById('toast').textContent");
+    assert.ok(texto.toLowerCase().includes('sessao expirou de novo'), 'texto do toast: ' + texto);
+  });
+
   await record('_solicitarReautenticacao(): N chamadas falhando juntas -- 1 SO prompt (promessa compartilhada)', async () => {
     await act("showScreen('scr-home')");
     const p1 = ctxCall('_solicitarReautenticacao()');
